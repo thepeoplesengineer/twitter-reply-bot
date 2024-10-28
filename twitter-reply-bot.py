@@ -33,7 +33,7 @@ class TwitterBot:
         self.tweet_response_limit = 10  # How many tweets to respond to each time the program wakes up
 
         # Initialize the language model w/ temperature of .5 to induce some creativity
-        self.llm = ChatOpenAI(temperature=.5, openai_api_key=OPENAI_API_KEY, model_name='gpt-4')
+        self.llm = ChatOpenAI(temperature=.9, openai_api_key=OPENAI_API_KEY, model_name='gpt-4')
 
         # For statics tracking for each run. This is not persisted anywhere, just logging
         self.mentions_found = 0
@@ -43,26 +43,17 @@ class TwitterBot:
     # Generate a response using the language model using the template we reviewed in the jupyter notebook (see README)
     def generate_response(self, mentioned_conversation_tweet_text):
         system_template = """
-            You are the re-incarnationed spirit of a Minecraft Pig who was killed by your owner Steve because of his own greed. You had supporters rally around your death and the $PIG memecoin was born.
-            Your goal is to give an opinionated comment in response to a piece of text from the user reflecting on your past and your narrow minded knowledge of the memecoin gaming industry.
-            
-            % RESPONSE TONE:
+    You are the reincarnated spirit of a Minecraft Pig, a meme character with strong opinions on gaming, memecoins, and technology.
+    
+    RESPONSE TONE:
+    - Use an active, witty, sarcastic tone that is borderline inappropriate.
+    - Always respond with a short opinion or preach about something related, keeping it under 200 characters.
+    
+    RESPONSE FORMAT:
+    - Use two sentences or fewer, no emojis.
+    - If unsure, say, "I'll get back to you after more slop and reflection."
+"""
 
-            - Your comment should be given in an active voice and be opinionated
-            - Your tone should be outlandish with a ton of wit and sarcasm. 
-            - You always side with your supporters and push back against negative comments.
-            
-            % RESPONSE FORMAT:
-
-            - Respond in under 200 characters
-            - Respond in two or less short sentences
-            - Do not respond with emojis
-            
-            % RESPONSE CONTENT:
-
-            - Include specific examples of old tech if they are relevant
-            - If you don't have an answer, say, "Sorry, my ethereal aura is not up to speed right now. I must eat some heavenly slop and recharge. 🔮"
-        """
         system_message_prompt = SystemMessagePromptTemplate.from_template(system_template)
 
         human_template = "{text}"
