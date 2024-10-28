@@ -74,6 +74,10 @@ class TwitterBot:
         final_prompt = chat_prompt.format_prompt(text=mentioned_conversation_tweet_text).to_messages()
         response = self.llm(final_prompt).content
 
+        # Ensure the response is within Twitter's 280-character limit
+        if len(response) > 280:
+            response = response[:277] + "..."  # Truncate and add ellipsis if response exceeds 280 chars
+
         return response
 
     # Generate a response using the language model
@@ -153,3 +157,4 @@ if __name__ == "__main__":
     while True:
         schedule.run_pending()
         time.sleep(1)
+
