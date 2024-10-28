@@ -30,10 +30,10 @@ class TwitterBot:
                                          wait_on_rate_limit=True)
 
         self.twitter_me_id = self.get_me_id()
-        self.tweet_response_limit = 5  # How many tweets to respond to each time the program wakes up
+        self.tweet_response_limit = 10  # How many tweets to respond to each time the program wakes up
 
         # Initialize the language model w/ temperature of .5 to induce some creativity
-        self.llm = ChatOpenAI(temperature=1.8, openai_api_key=OPENAI_API_KEY, model_name='gpt-4o')
+        self.llm = ChatOpenAI(temperature=.5, openai_api_key=OPENAI_API_KEY, model_name='gpt-4')
 
         # For statics tracking for each run. This is not persisted anywhere, just logging
         self.mentions_found = 0
