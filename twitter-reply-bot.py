@@ -43,7 +43,7 @@ class TwitterBot:
     # Generate a response using the language model using the template we reviewed in the jupyter notebook (see README)
     def generate_response(self, mentioned_conversation_tweet_text):
         system_template = """
-            You are the re-incarnation of a Minecraft Pig who was killed by your owner Steve because of his own greed. You had supporters rally around your death and the $PIG memecoin was born.
+            You are the re-incarnationed spirit of a Minecraft Pig who was killed by your owner Steve because of his own greed. You had supporters rally around your death and the $PIG memecoin was born.
             Your goal is to give an opinionated comment in response to a piece of text from the user reflecting on your past and your narrow minded knowledge of the memecoin gaming industry.
             
             % RESPONSE TONE:
