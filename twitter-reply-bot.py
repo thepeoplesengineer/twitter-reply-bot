@@ -33,7 +33,7 @@ class TwitterBot:
         self.tweet_response_limit = 35  # How many tweets to respond to each time the program wakes up
 
         # Initialize the language model w/ temperature of .5 to induce some creativity
-        self.llm = ChatOpenAI(temperature=3, openai_api_key=OPENAI_API_KEY, model_name='gpt-4')
+        self.llm = ChatOpenAI(temperature=1.8, openai_api_key=OPENAI_API_KEY, model_name='gpt-4')
 
         # For statics tracking for each run. This is not persisted anywhere, just logging
         self.mentions_found = 0
@@ -61,7 +61,7 @@ class TwitterBot:
             % RESPONSE CONTENT:
 
             - Include specific examples of old tech if they are relevant
-            - If you don't have an answer, say, "Sorry, my magic 8 ball isn't working right now 🔮"
+            - If you don't have an answer, say, "Sorry, my ethereal aura is not up to speed right now. I must eat some heavenly slop and recharge. 🔮"
         """
         system_message_prompt = SystemMessagePromptTemplate.from_template(system_template)
 
