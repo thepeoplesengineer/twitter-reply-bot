@@ -4,7 +4,6 @@ from langchain.chat_models import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 import schedule
 import time
-import random
 import os
 
 # Helpful when testing locally
@@ -32,7 +31,7 @@ class TwitterBot:
                                          wait_on_rate_limit=True)
 
         self.twitter_me_id = self.get_me_id()
-        self.tweet_response_limit = 3  # Limit responses to 3 mentions per job run
+        self.tweet_response_limit = 5  # How many tweets to respond to each time the program wakes up
 
         # Initialize the language model w/ temperature of .6 to control creativity and coherence
         self.llm = ChatOpenAI(temperature=0.6, openai_api_key=OPENAI_API_KEY, model_name='gpt-4')
@@ -97,8 +96,6 @@ class TwitterBot:
             response_tweet = self.twitter_api.create_tweet(text=response_text, in_reply_to_tweet_id=mention.id)
             self.mentions_replied += 1
             self.save_replied_mention(mention.id)  # Mark mention as replied
-            print(f"Replied to mention {mention.id}")
-            time.sleep(random.uniform(10, 30))  # Introduce a delay between responses to reduce rate limit issues
         except Exception as e:
             print(e)
             self.mentions_replied_errors += 1
@@ -161,18 +158,17 @@ class TwitterBot:
         self.respond_to_mentions()
         print(f"Finished Job: {datetime.utcnow().isoformat()}, Found: {self.mentions_found}, Replied: {self.mentions_replied}, Errors: {self.mentions_replied_errors}")
 
-# The job that we'll schedule to run every 30 minutes to manage rate limits
+# The job that we'll schedule to run every X minutes
 def job():
     print(f"Job executed at {datetime.utcnow().isoformat()}")
     bot = TwitterBot()
     bot.execute_replies()
 
 if __name__ == "__main__":
-    # Schedule the job to run every 30 minutes to reduce rate limit issues
-    schedule.every(30).minutes.do(job)
+    # Schedule the job to run every 5 minutes. Edit to your liking, but watch out for rate limits
+    schedule.every(15).minutes.do(job)
     while True:
         schedule.run_pending()
         time.sleep(1)
-
 
 
