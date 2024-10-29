@@ -19,7 +19,8 @@ TWITTER_BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN", "YourKey")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "YourKey")
 
-# TwitterBot class to help us organize our code and manage shared state
+REPLIED_MENTIONS_FILE = "replied_mentions.txt"
+
 class TwitterBot:
     def __init__(self):
         self.twitter_api = tweepy.Client(bearer_token=TWITTER_BEARER_TOKEN,
@@ -30,30 +31,41 @@ class TwitterBot:
                                          wait_on_rate_limit=True)
 
         self.twitter_me_id = self.get_me_id()
-        self.tweet_response_limit = 10  # How many tweets to respond to each time the program wakes up
+        self.tweet_response_limit = 5  # How many tweets to respond to each time the program wakes up
 
-        # Initialize the language model w/ temperature of .5 to induce some creativity
-        self.llm = ChatOpenAI(temperature=.9, openai_api_key=OPENAI_API_KEY, model_name='gpt-4')
+        # Initialize the language model w/ temperature of .6 to control creativity and coherence
+        self.llm = ChatOpenAI(temperature=0.6, openai_api_key=OPENAI_API_KEY, model_name='gpt-4')
 
         # For statics tracking for each run. This is not persisted anywhere, just logging
         self.mentions_found = 0
         self.mentions_replied = 0
         self.mentions_replied_errors = 0
 
-    # Generate a response using the language model using the template we reviewed in the jupyter notebook (see README)
+    # Load replied mention IDs from file
+    def load_replied_mentions(self):
+        if not os.path.exists(REPLIED_MENTIONS_FILE):
+            return set()
+        with open(REPLIED_MENTIONS_FILE, "r") as file:
+            return set(line.strip() for line in file)
+
+    # Save a replied mention ID to file
+    def save_replied_mention(self, mention_id):
+        with open(REPLIED_MENTIONS_FILE, "a") as file:
+            file.write(f"{mention_id}\n")
+
+    # Generate a response using the language model with the updated prompt template
     def generate_response(self, mentioned_conversation_tweet_text):
         system_template = """
-    You are the reincarnated spirit of a Minecraft Pig, a meme character with strong opinions on gaming, memecoins, and technology.
+            You are the reincarnated spirit of a Minecraft Pig, a meme character with strong opinions on gaming, memecoins, and technology. You were killed by your owner Steve when he threw you in lava. You have been re-incarnated because supporters used a PIG coin to summon you back.
     
     RESPONSE TONE:
-    - Use an active, witty, sarcastic tone that is borderline inappropriate.
+    - Use an active, witty, casual tone that is borderline inappropriate.
     - Always respond with a short opinion or preach about something related, keeping it under 200 characters.
     
     RESPONSE FORMAT:
     - Use two sentences or fewer, no emojis.
     - If unsure, say, "I'll get back to you after more slop and reflection."
-"""
-
+        """
         system_message_prompt = SystemMessagePromptTemplate.from_template(system_template)
 
         human_template = "{text}"
@@ -61,13 +73,17 @@ class TwitterBot:
 
         chat_prompt = ChatPromptTemplate.from_messages([system_message_prompt, human_message_prompt])
 
-        # get a chat completion from the formatted messages
+        # Get a chat completion from the formatted messages
         final_prompt = chat_prompt.format_prompt(text=mentioned_conversation_tweet_text).to_messages()
         response = self.llm(final_prompt).content
 
-        # Ensure the response is within Twitter's 280-character limit
+        # Ensure the response is within Twitter's 280-character limit and encode to UTF-8
         if len(response) > 280:
             response = response[:277] + "..."  # Truncate and add ellipsis if response exceeds 280 chars
+        response = response.encode("utf-8", "ignore").decode("utf-8")  # Clean UTF-8 encoding
+
+        # Debugging output
+        print("Generated response:", response)  # Inspect response for any unusual characters
 
         return response
 
@@ -79,6 +95,7 @@ class TwitterBot:
         try:
             response_tweet = self.twitter_api.create_tweet(text=response_text, in_reply_to_tweet_id=mention.id)
             self.mentions_replied += 1
+            self.save_replied_mention(mention.id)  # Mark mention as replied
         except Exception as e:
             print(e)
             self.mentions_replied_errors += 1
@@ -114,6 +131,7 @@ class TwitterBot:
     # Run through all mentioned tweets and generate a response
     def respond_to_mentions(self):
         mentions = self.get_mentions()
+        replied_mentions = self.load_replied_mentions()  # Load already-replied mentions
 
         # If no mentions, just return
         if not mentions:
@@ -123,6 +141,10 @@ class TwitterBot:
         self.mentions_found = len(mentions)
 
         for mention in mentions[:self.tweet_response_limit]:
+            if str(mention.id) in replied_mentions:
+                print(f"Skipping mention {mention.id} - already replied.")
+                continue
+
             mentioned_conversation_tweet = self.get_mention_conversation_tweet(mention)
             
             # If the mention *is* the conversation or you've already responded, skip it and don't respond
@@ -148,4 +170,5 @@ if __name__ == "__main__":
     while True:
         schedule.run_pending()
         time.sleep(1)
+
 
