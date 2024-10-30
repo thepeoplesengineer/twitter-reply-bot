@@ -183,6 +183,8 @@ class TwitterBot:
             file.write(f"{mention_id}\n")
         logging.info(f"Saved replied mention ID: {mention_id}")
 
+import random
+
 def show_inventory(username, tweet_id):
     conn = sqlite3.connect("engagements.db")
     cursor = conn.cursor()
@@ -190,24 +192,38 @@ def show_inventory(username, tweet_id):
     result = cursor.fetchone()
     now = datetime.utcnow()
 
+    # Time restriction for rechecking inventory
     if result and result[0] and now < datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S") + timedelta(hours=24):
         remaining_time = (datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S") + timedelta(hours=24)) - now
         hours, remainder = divmod(remaining_time.seconds, 3600)
         minutes = remainder // 60
-        response = f"@{username}, check your inventory again in {hours} hours and {minutes} minutes."
+        response = f"@{username}, check your inventory again in {hours} hours and {minutes} minutes. 🕰️"
         bot.twitter_api_v2.create_tweet(text=response, in_reply_to_tweet_id=tweet_id)
         logging.info(f"Inventory check denied for @{username}. Time remaining: {hours}h {minutes}m")
         return
 
+    # Fetch inventory details
     cursor.execute("SELECT item, quantity FROM inventory WHERE username = ?", (username,))
     inventory = cursor.fetchall()
     inventory_message = ", ".join([f"{item}: {qty}" for item, qty in inventory]) if inventory else "No items yet!"
-    response = f"@{username}, here’s your current inventory: {inventory_message}"
+
+    # Add a slight variation to avoid duplicate error
+    phrases = [
+        f"@{username}, here’s your current inventory: {inventory_message}",
+        f"@{username}, your stash so far: {inventory_message}",
+        f"@{username}, current items collected: {inventory_message}",
+        f"@{username}, what you’ve gathered: {inventory_message}"
+    ]
+    response = random.choice(phrases)
+
+    # Update last_checked to the current time
     cursor.execute("UPDATE inventory SET last_checked = ? WHERE username = ?", (now.strftime("%Y-%m-%d %H:%M:%S"), username))
     conn.commit()
     conn.close()
+
     bot.twitter_api_v2.create_tweet(text=response, in_reply_to_tweet_id=tweet_id)
     logging.info(f"Inventory check complete for @{username}. Inventory: {inventory_message}")
+
 
 # Scheduling tasks in separate threads
 def run_mentions_check():
