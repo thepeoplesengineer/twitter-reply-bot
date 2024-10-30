@@ -76,32 +76,26 @@ def award_item(username, interaction_type):
 # Check all engagements on bot's posts
 def check_engagements():
     logging.info("Checking engagements on bot's recent tweets.")
-    bot_tweets = bot.twitter_api.get_users_tweets(id=bot.twitter_me_id, max_results=5)
+    bot_tweets = bot.twitter_api_v2.get_users_tweets(id=bot.twitter_me_id, max_results=5)
 
     for tweet in bot_tweets.data:
         tweet_id = tweet.id
         try:
             # Check likes
-            likers = bot.twitter_api.get_liking_users(id=tweet_id)
-            for user in likers.data:
-                award_item(user.username, "like")
-                logging.info(f"[Like] {user.username} liked tweet {tweet_id}")
+            likers = bot.twitter_api_v1.get_favorites(id=tweet_id)
+            for user in likers:
+                award_item(user.screen_name, "like")
+                logging.info(f"[Like] {user.screen_name} liked tweet {tweet_id}")
 
             # Check retweets
-            retweeters = bot.twitter_api.get_retweeters(id=tweet_id)
-            for user in retweeters.data:
-                award_item(user.username, "retweet")
-                logging.info(f"[Retweet] {user.username} retweeted tweet {tweet_id}")
+            retweeters = bot.twitter_api_v1.retweets(id=tweet_id)
+            for retweet in retweeters:
+                award_item(retweet.user.screen_name, "retweet")
+                logging.info(f"[Retweet] {retweet.user.screen_name} retweeted tweet {tweet_id}")
 
-            # Check comments (hypothetical method for comment data)
-            replies = bot.twitter_api.get_tweet_replies(id=tweet_id)
-            for reply in replies.data:
-                award_item(reply.author_id, "comment")
-                logging.info(f"[Comment] {reply.author_id} commented on tweet {tweet_id}")
-
-        except tweepy.TweepError as e:
+        except Exception as e:
             logging.error(f"[Error] Failed to fetch engagements for tweet {tweet_id}: {e}")
-    
+
     log_database_state()
 
 # Log the current state of the database tables
@@ -122,27 +116,30 @@ def log_database_state():
 
     conn.close()
 
-# Define TwitterBot class
 class TwitterBot:
     def __init__(self):
-        self.twitter_api = tweepy.Client(bearer_token=TWITTER_BEARER_TOKEN,
-                                         consumer_key=TWITTER_API_KEY,
-                                         consumer_secret=TWITTER_API_SECRET,
-                                         access_token=TWITTER_ACCESS_TOKEN,
-                                         access_token_secret=TWITTER_ACCESS_TOKEN_SECRET,
-                                         wait_on_rate_limit=True)
+        # API for v1 User Context
+        self.twitter_api_v1 = tweepy.API(tweepy.OAuth1UserHandler(
+            TWITTER_API_KEY, TWITTER_API_SECRET, TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET
+        ))
+        # API v2 for other interactions
+        self.twitter_api_v2 = tweepy.Client(bearer_token=TWITTER_BEARER_TOKEN,
+                                            consumer_key=TWITTER_API_KEY,
+                                            consumer_secret=TWITTER_API_SECRET,
+                                            access_token=TWITTER_ACCESS_TOKEN,
+                                            access_token_secret=TWITTER_ACCESS_TOKEN_SECRET,
+                                            wait_on_rate_limit=True)
         self.llm = ChatOpenAI(temperature=0.8, openai_api_key=OPENAI_API_KEY, model_name='gpt-4')
         self.twitter_me_id = self.get_me_id()
 
     def get_me_id(self):
-        return self.twitter_api.get_me().data.id
+        return self.twitter_api_v2.get_me().data.id
 
     # Generate responses using the ChatGPT model
     def generate_response(self, tweet_text):
-        # Persona prompt
         system_template = """
             You are the reincarnated spirit GOD of a Minecraft Pig, guiding followers to rebuild their memecoin. Your backstory: You were killed by your owner Steve when he threw you in lava for his own greed and the community out of anger kicked him out and summoned you back in your God form.
-            RESPONSE TONE: Snarky and witty but loves his followers. RESPONSE FORMAT: Two sentences, no emojis. Mention $PIG occassionally.
+            RESPONSE TONE: Snarky and witty but loves his followers. RESPONSE FORMAT: Two sentences, no emojis. Mention $PIG occasionally.
         """
         system_message_prompt = SystemMessagePromptTemplate.from_template(system_template)
         human_template = "{text}"
@@ -158,14 +155,13 @@ class TwitterBot:
             show_inventory(mention.author_id, mention.id)
         else:
             response_text = self.generate_response(mention.text)
-            self.twitter_api.create_tweet(text=response_text, in_reply_to_tweet_id=mention.id)
+            self.twitter_api_v2.create_tweet(text=response_text, in_reply_to_tweet_id=mention.id)
             award_item(mention.author_id, "mention")
             logging.info(f"Responded to mention by @{mention.author_id} with: {response_text}")
 
-    # Check mentions and respond to new ones
     def check_mentions_for_replies(self):
         logging.info("Checking for new mentions.")
-        mentions = self.twitter_api.get_users_mentions(id=self.twitter_me_id)
+        mentions = self.twitter_api_v2.get_users_mentions(id=self.twitter_me_id)
         replied_mentions = self.load_replied_mentions()
         new_mentions = [mention for mention in mentions.data if str(mention.id) not in replied_mentions]
         selected_mentions = random.sample(new_mentions, min(len(new_mentions), 5))
@@ -199,7 +195,7 @@ def show_inventory(username, tweet_id):
         hours, remainder = divmod(remaining_time.seconds, 3600)
         minutes = remainder // 60
         response = f"@{username}, check your inventory again in {hours} hours and {minutes} minutes."
-        bot.twitter_api.create_tweet(text=response, in_reply_to_tweet_id=tweet_id)
+        bot.twitter_api_v2.create_tweet(text=response, in_reply_to_tweet_id=tweet_id)
         logging.info(f"Inventory check denied for @{username}. Time remaining: {hours}h {minutes}m")
         return
 
@@ -210,7 +206,7 @@ def show_inventory(username, tweet_id):
     cursor.execute("UPDATE inventory SET last_checked = ? WHERE username = ?", (now.strftime("%Y-%m-%d %H:%M:%S"), username))
     conn.commit()
     conn.close()
-    bot.twitter_api.create_tweet(text=response, in_reply_to_tweet_id=tweet_id)
+    bot.twitter_api_v2.create_tweet(text=response, in_reply_to_tweet_id=tweet_id)
     logging.info(f"Inventory check complete for @{username}. Inventory: {inventory_message}")
 
 # Scheduling tasks in separate threads
