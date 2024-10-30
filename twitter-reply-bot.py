@@ -131,14 +131,17 @@ class TwitterBot:
     def respond_to_mention(self, mention):
         if "#pigme" in mention.text.lower():
             # Call inventory function if #pigme is in the tweet
+            logging.info(f"Inventory check request from @{mention.author_id}")
             show_inventory(mention.author_id, mention.id)
         else:
             # Generate a normal response otherwise
             response_text = self.generate_response(mention.text)
             self.twitter_api.create_tweet(text=response_text, in_reply_to_tweet_id=mention.id)
             award_item(mention.author_id, "mention")
+            logging.info(f"Responded to mention by @{mention.author_id} with: {response_text}")
 
     def check_mentions_for_replies(self):
+        logging.info("Checking for new mentions.")
         mentions = self.twitter_api.get_users_mentions(id=self.twitter_me_id)
         replied_mentions = self.load_replied_mentions()
         
@@ -163,6 +166,7 @@ class TwitterBot:
     def save_replied_mention(self, mention_id):
         with open(REPLIED_MENTIONS_FILE, "a") as file:
             file.write(f"{mention_id}\n")
+        logging.info(f"Saved replied mention ID: {mention_id}")
 
 def show_inventory(username, tweet_id):
     conn = sqlite3.connect("engagements.db")
@@ -177,6 +181,7 @@ def show_inventory(username, tweet_id):
         minutes = remainder // 60
         response = f"@{username}, check your inventory again in {hours} hours and {minutes} minutes."
         bot.twitter_api.create_tweet(text=response, in_reply_to_tweet_id=tweet_id)
+        logging.info(f"Inventory check denied for @{username}. Time remaining: {hours}h {minutes}m")
         return
 
     cursor.execute("SELECT item, quantity FROM inventory WHERE username = ?", (username,))
@@ -187,6 +192,7 @@ def show_inventory(username, tweet_id):
     conn.commit()
     conn.close()
     bot.twitter_api.create_tweet(text=response, in_reply_to_tweet_id=tweet_id)
+    logging.info(f"Inventory check complete for @{username}. Inventory: {inventory_message}")
 
 # Scheduling tasks in separate threads
 def run_mentions_check():
