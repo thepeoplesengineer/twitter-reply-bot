@@ -81,35 +81,22 @@ def check_engagements():
     for tweet in bot_tweets.data:
         tweet_id = tweet.id
         try:
-            # Check likes
-            likers = bot.twitter_api_v2.get_liking_users(tweet_id)
-            for user in likers.data:
-                award_item(user.username, "like")
-                logging.info(f"[Like] {user.username} liked tweet {tweet_id}")
+            # Check likes using v1 User Context
+            likers = bot.twitter_api_v1.get_favorites(id=tweet_id)
+            for user in likers:
+                award_item(user.screen_name, "like")
+                logging.info(f"[Like] {user.screen_name} liked tweet {tweet_id}")
 
-            # Check retweets
-            retweeters = bot.twitter_api_v2.get_retweeters(tweet_id)
-            for user in retweeters.data:
-                award_item(user.username, "retweet")
-                logging.info(f"[Retweet] {user.username} retweeted tweet {tweet_id}")
+            # Check retweets using v1 User Context
+            retweeters = bot.twitter_api_v1.retweets(id=tweet_id)
+            for retweet in retweeters:
+                award_item(retweet.user.screen_name, "retweet")
+                logging.info(f"[Retweet] {retweet.user.screen_name} retweeted tweet {tweet_id}")
 
-            # Check replies using search-based workaround
-            check_replies(tweet_id)
-
-        except tweepy.errors.Forbidden as e:
+        except tweepy.errors.TweepyException as e:
             logging.error(f"[Error] Failed to fetch engagements for tweet {tweet_id}: {e}")
-        except Exception as e:
-            logging.error(f"[Error] Unexpected issue fetching engagements for tweet {tweet_id}: {e}")
-    
-    log_database_state()
 
-# Check for replies to a tweet using search as Twitter does not have a direct replies API
-def check_replies(tweet_id):
-    query = f"conversation_id:{tweet_id} from:{bot.twitter_me_id}"
-    replies = bot.twitter_api_v2.search_recent_tweets(query=query, tweet_fields=["author_id"])
-    for reply in replies.data:
-        award_item(reply.author_id, "comment")
-        logging.info(f"[Comment] {reply.author_id} commented on tweet {tweet_id}")
+    log_database_state()
 
 # Log the current state of the database tables
 def log_database_state():
@@ -129,17 +116,20 @@ def log_database_state():
 
     conn.close()
 
-# Define TwitterBot class
 class TwitterBot:
     def __init__(self):
-        # API v2 for engagements and interactions
+        # API for v1 User Context
+        self.twitter_api_v1 = tweepy.API(tweepy.OAuth1UserHandler(
+            TWITTER_API_KEY, TWITTER_API_SECRET, TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET
+        ))
+        # API v2 for general interactions
         self.twitter_api_v2 = tweepy.Client(bearer_token=TWITTER_BEARER_TOKEN,
                                             consumer_key=TWITTER_API_KEY,
                                             consumer_secret=TWITTER_API_SECRET,
                                             access_token=TWITTER_ACCESS_TOKEN,
                                             access_token_secret=TWITTER_ACCESS_TOKEN_SECRET,
                                             wait_on_rate_limit=True)
-        self.llm = ChatOpenAI(temperature=1, openai_api_key=OPENAI_API_KEY, model_name='gpt-4')
+        self.llm = ChatOpenAI(temperature=0.8, openai_api_key=OPENAI_API_KEY, model_name='gpt-4')
         self.twitter_me_id = self.get_me_id()
 
     def get_me_id(self):
@@ -148,8 +138,16 @@ class TwitterBot:
     # Generate responses using the ChatGPT model
     def generate_response(self, tweet_text):
         system_template = """
-            You are the reincarnated spirit GOD of a Minecraft Pig, guiding followers to rebuild their memecoin. Your backstory: You were killed by your owner Steve when he threw you in lava for his own greed and the community out of anger kicked him out and summoned you back in your God form.
-            RESPONSE TONE: Snarky, Opinionated and Witty. RESPONSE FORMAT: Two or three sentences or sometimes ask a question, no emojis. Mention $PIG occasionally.
+            You are the reincarnated spirit GOD of a Minecraft Pig, guiding followers to rebuild their memecoin; you're a meme character with strong opinions on gaming, memecoins, and technology. You were killed by your owner Steve when he threw you in lava in a Minecraft server. You have been re-incarnated because supporters used a PIG coin to summon you back and you are ready to unleash your wrath on your haters.
+    
+    RESPONSE TONE:
+    - Use an active, witty, casual tone that is borderline inappropriate.
+    - Always respond with a short opinion or preach about something related, keeping it under 200 characters.
+    
+    RESPONSE FORMAT:
+    - Use two sentences or fewer, no emojis. Ask questions too.
+    - Mention the ticker $PIG every so often
+
         """
         system_message_prompt = SystemMessagePromptTemplate.from_template(system_template)
         human_template = "{text}"
@@ -193,7 +191,6 @@ class TwitterBot:
             file.write(f"{mention_id}\n")
         logging.info(f"Saved replied mention ID: {mention_id}")
 
-# Display inventory and update last check time
 def show_inventory(username, tweet_id):
     conn = sqlite3.connect("engagements.db")
     cursor = conn.cursor()
@@ -216,7 +213,7 @@ def show_inventory(username, tweet_id):
     inventory = cursor.fetchall()
     inventory_message = ", ".join([f"{item}: {qty}" for item, qty in inventory]) if inventory else "No items yet!"
 
-    # Add slight variation to avoid duplicate error
+    # Avoid duplicate error
     phrases = [
         f"@{username}, here’s your current inventory: {inventory_message}",
         f"@{username}, your stash so far: {inventory_message}",
@@ -225,7 +222,6 @@ def show_inventory(username, tweet_id):
     ]
     response = random.choice(phrases)
 
-    # Update last_checked to the current time
     cursor.execute("UPDATE inventory SET last_checked = ? WHERE username = ?", (now.strftime("%Y-%m-%d %H:%M:%S"), username))
     conn.commit()
     conn.close()
