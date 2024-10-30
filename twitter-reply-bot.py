@@ -49,7 +49,7 @@ conn.commit()
 conn.close()
 
 # Define items and daily rotating rewards
-item_options = ["Wood", "Bacon", "Stone", "Iron", "Diamond"]
+item_options = ["Wood", "Bacon", "Stone", "Iron", "Water"]
 reward_map = {"like": None, "retweet": None, "comment": None}
 
 # Function to rotate rewards daily
@@ -129,9 +129,14 @@ class TwitterBot:
         return response[:280]
 
     def respond_to_mention(self, mention):
-        response_text = self.generate_response(mention.text)
-        self.twitter_api.create_tweet(text=response_text, in_reply_to_tweet_id=mention.id)
-        award_item(mention.author_id, "mention")
+        if "#pigme" in mention.text.lower():
+            # Call inventory function if #pigme is in the tweet
+            show_inventory(mention.author_id, mention.id)
+        else:
+            # Generate a normal response otherwise
+            response_text = self.generate_response(mention.text)
+            self.twitter_api.create_tweet(text=response_text, in_reply_to_tweet_id=mention.id)
+            award_item(mention.author_id, "mention")
 
     def check_mentions_for_replies(self):
         mentions = self.twitter_api.get_users_mentions(id=self.twitter_me_id)
