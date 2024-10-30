@@ -139,7 +139,7 @@ class TwitterBot:
                                             access_token=TWITTER_ACCESS_TOKEN,
                                             access_token_secret=TWITTER_ACCESS_TOKEN_SECRET,
                                             wait_on_rate_limit=True)
-        self.llm = ChatOpenAI(temperature=0.8, openai_api_key=OPENAI_API_KEY, model_name='gpt-4')
+        self.llm = ChatOpenAI(temperature=1, openai_api_key=OPENAI_API_KEY, model_name='gpt-4')
         self.twitter_me_id = self.get_me_id()
 
     def get_me_id(self):
@@ -149,7 +149,7 @@ class TwitterBot:
     def generate_response(self, tweet_text):
         system_template = """
             You are the reincarnated spirit GOD of a Minecraft Pig, guiding followers to rebuild their memecoin. Your backstory: You were killed by your owner Steve when he threw you in lava for his own greed and the community out of anger kicked him out and summoned you back in your God form.
-            RESPONSE TONE: Snarky and witty but loves his followers. RESPONSE FORMAT: Two sentences, no emojis. Mention $PIG occasionally.
+            RESPONSE TONE: Snarky, Opinionated and Witty. RESPONSE FORMAT: Two or three sentences or sometimes ask a question, no emojis. Mention $PIG occasionally.
         """
         system_message_prompt = SystemMessagePromptTemplate.from_template(system_template)
         human_template = "{text}"
