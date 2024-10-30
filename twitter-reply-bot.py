@@ -112,7 +112,7 @@ class TwitterBot:
         # Custom persona prompt
         system_template = """
             You are the reincarnated spirit of a Minecraft Pig, a meme character with strong opinions on gaming, memecoins, and technology. 
-            You were killed by your owner Steve when he threw you in lava. You have been re-incarnated because supporters used a PIG coin to summon you back.
+            You were killed by your owner Steve when he threw you in lava. You have been re-incarnated because supporters used a PIG coin to summon you back. You are here to guide your followers to start over and build back up their memecoin.
             RESPONSE TONE: Active, witty, casual tone that is borderline inappropriate.
             RESPONSE FORMAT: Use two sentences or fewer, no emojis. 
             If unsure, say, "I'll get back to you after more slop and reflection."
@@ -133,21 +133,20 @@ class TwitterBot:
         self.twitter_api.create_tweet(text=response_text, in_reply_to_tweet_id=mention.id)
         award_item(mention.author_id, "mention")
 
-    def check_for_likes(self):
-        # Implement like check with rate limit handling
-        log_database_state()  # Log database after checking likes
-
-    def check_for_retweets(self):
-        # Implement retweet check with rate limit handling
-        log_database_state()  # Log database after checking retweets
-
     def check_mentions_for_replies(self):
         mentions = self.twitter_api.get_users_mentions(id=self.twitter_me_id)
         replied_mentions = self.load_replied_mentions()
-        for mention in mentions.data:
-            if str(mention.id) not in replied_mentions:
-                self.respond_to_mention(mention)
-                self.save_replied_mention(mention.id)
+        
+        # Filter new mentions that haven’t been replied to yet
+        new_mentions = [mention for mention in mentions.data if str(mention.id) not in replied_mentions]
+        
+        # Randomly select up to 5 mentions
+        selected_mentions = random.sample(new_mentions, min(len(new_mentions), 5))
+        
+        for mention in selected_mentions:
+            self.respond_to_mention(mention)
+            self.save_replied_mention(mention.id)
+
         log_database_state()  # Log database after checking mentions
 
     def load_replied_mentions(self):
@@ -185,27 +184,15 @@ def show_inventory(username, tweet_id):
     bot.twitter_api.create_tweet(text=response, in_reply_to_tweet_id=tweet_id)
 
 # Scheduling tasks in separate threads
-def run_like_check():
-    while True:
-        bot.check_for_likes()
-        time.sleep(3600)  # Check every hour
-
-def run_retweet_check():
-    while True:
-        bot.check_for_retweets()
-        time.sleep(3600)  # Check every hour
-
 def run_mentions_check():
     while True:
         bot.check_mentions_for_replies()
-        time.sleep(3600)  # Check every hour
+        time.sleep(2700)  # Run every 45 minutes
 
 bot = TwitterBot()
 rotate_rewards()  # Set initial reward rotation
 
 # Start each engagement check in a separate thread
-threading.Thread(target=run_like_check, daemon=True).start()
-threading.Thread(target=run_retweet_check, daemon=True).start()
 threading.Thread(target=run_mentions_check, daemon=True).start()
 
 # Daily reward rotation at midnight
@@ -214,5 +201,3 @@ schedule.every().day.at("00:00").do(rotate_rewards)
 while True:
     schedule.run_pending()
     time.sleep(1)
-
-
