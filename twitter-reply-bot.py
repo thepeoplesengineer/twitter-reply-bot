@@ -73,30 +73,50 @@ def award_item(username, interaction_type):
         conn.close()
         logging.info(f"[Award] {username} received 1 '{item}' for a '{interaction_type}'.")
 
-# Check all engagements on bot's posts
+# Engagement goal check
+ENGAGEMENT_TOTAL_TARGET = 5  # Trigger reward distribution at 5 total engagements
+goal_achieved_tweets = set()
+
 def check_engagements():
     logging.info("Checking engagements on bot's recent tweets.")
     bot_tweets = bot.twitter_api_v2.get_users_tweets(id=bot.twitter_me_id, max_results=5)
 
     for tweet in bot_tweets.data:
         tweet_id = tweet.id
-        try:
-            # Check likes using v1 User Context
-            likers = bot.twitter_api_v1.get_favorites(id=tweet_id)
-            for user in likers:
-                award_item(user.screen_name, "like")
-                logging.info(f"[Like] {user.screen_name} liked tweet {tweet_id}")
+        if tweet_id in goal_achieved_tweets:
+            continue  # Skip tweets that already reached engagement goals
 
-            # Check retweets using v1 User Context
-            retweeters = bot.twitter_api_v1.retweets(id=tweet_id)
-            for retweet in retweeters:
-                award_item(retweet.user.screen_name, "retweet")
-                logging.info(f"[Retweet] {retweet.user.screen_name} retweeted tweet {tweet_id}")
+        try:
+            # Get metrics for the tweet
+            tweet_metrics = bot.twitter_api_v2.get_tweet(tweet_id, tweet_fields="public_metrics").data["public_metrics"]
+            likes = tweet_metrics["like_count"]
+            retweets = tweet_metrics["retweet_count"]
+            replies = tweet_metrics["reply_count"]
+
+            # Calculate total engagements
+            total_engagements = likes + retweets + replies
+            logging.info(f"Tweet {tweet_id} total engagements: {total_engagements}")
+
+            # Check if total engagement target has been met
+            if total_engagements >= ENGAGEMENT_TOTAL_TARGET:
+                goal_achieved_tweets.add(tweet_id)
+                logging.info(f"Tweet {tweet_id} has met the total engagement target of {ENGAGEMENT_TOTAL_TARGET}!")
+                distribute_rewards(tweet_id)
 
         except tweepy.errors.TweepyException as e:
             logging.error(f"[Error] Failed to fetch engagements for tweet {tweet_id}: {e}")
 
     log_database_state()
+
+def distribute_rewards(tweet_id):
+    logging.info(f"Distributing rewards for tweet {tweet_id}.")
+    # Example: Reward users who replied or engaged with #pigme in mentions
+    mentions = bot.twitter_api_v2.get_tweet(tweet_id, expansions="author_id")
+    engaged_users = set(mention["author_id"] for mention in mentions.data)
+
+    for user_id in engaged_users:
+        award_item(user_id, "goal_reward")
+        logging.info(f"Awarded 'goal_reward' to user {user_id} for engagement on tweet {tweet_id}")
 
 # Log the current state of the database tables
 def log_database_state():
@@ -139,15 +159,14 @@ class TwitterBot:
     def generate_response(self, tweet_text):
         system_template = """
             You are the reincarnated spirit GOD of a Minecraft Pig, guiding followers to rebuild their memecoin; you're a meme character with strong opinions on gaming, memecoins, and technology. You were killed by your owner Steve when he threw you in lava in a Minecraft server. You have been re-incarnated because supporters used a PIG coin to summon you back and you are ready to unleash your wrath on your haters.
-    
+
     RESPONSE TONE:
     - Use an active, witty, casual tone that is borderline inappropriate.
     - Always respond with a short opinion or preach about something related, keeping it under 200 characters.
-    
+
     RESPONSE FORMAT:
     - Use two sentences or fewer, no emojis. Ask questions too.
     - Mention the ticker $PIG every so often
-
         """
         system_message_prompt = SystemMessagePromptTemplate.from_template(system_template)
         human_template = "{text}"
@@ -247,3 +266,4 @@ schedule.every().hour.do(check_engagements)
 while True:
     schedule.run_pending()
     time.sleep(1)
+
