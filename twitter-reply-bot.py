@@ -82,21 +82,34 @@ def check_engagements():
         tweet_id = tweet.id
         try:
             # Check likes
-            likers = bot.twitter_api_v1.get_favorites(id=tweet_id)
-            for user in likers:
-                award_item(user.screen_name, "like")
-                logging.info(f"[Like] {user.screen_name} liked tweet {tweet_id}")
+            likers = bot.twitter_api_v2.get_liking_users(tweet_id)
+            for user in likers.data:
+                award_item(user.username, "like")
+                logging.info(f"[Like] {user.username} liked tweet {tweet_id}")
 
             # Check retweets
-            retweeters = bot.twitter_api_v1.retweets(id=tweet_id)
-            for retweet in retweeters:
-                award_item(retweet.user.screen_name, "retweet")
-                logging.info(f"[Retweet] {retweet.user.screen_name} retweeted tweet {tweet_id}")
+            retweeters = bot.twitter_api_v2.get_retweeters(tweet_id)
+            for user in retweeters.data:
+                award_item(user.username, "retweet")
+                logging.info(f"[Retweet] {user.username} retweeted tweet {tweet_id}")
 
-        except Exception as e:
+            # Check replies using search-based workaround
+            check_replies(tweet_id)
+
+        except tweepy.errors.Forbidden as e:
             logging.error(f"[Error] Failed to fetch engagements for tweet {tweet_id}: {e}")
-
+        except Exception as e:
+            logging.error(f"[Error] Unexpected issue fetching engagements for tweet {tweet_id}: {e}")
+    
     log_database_state()
+
+# Check for replies to a tweet using search as Twitter does not have a direct replies API
+def check_replies(tweet_id):
+    query = f"conversation_id:{tweet_id} from:{bot.twitter_me_id}"
+    replies = bot.twitter_api_v2.search_recent_tweets(query=query, tweet_fields=["author_id"])
+    for reply in replies.data:
+        award_item(reply.author_id, "comment")
+        logging.info(f"[Comment] {reply.author_id} commented on tweet {tweet_id}")
 
 # Log the current state of the database tables
 def log_database_state():
@@ -116,13 +129,10 @@ def log_database_state():
 
     conn.close()
 
+# Define TwitterBot class
 class TwitterBot:
     def __init__(self):
-        # API for v1 User Context
-        self.twitter_api_v1 = tweepy.API(tweepy.OAuth1UserHandler(
-            TWITTER_API_KEY, TWITTER_API_SECRET, TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET
-        ))
-        # API v2 for other interactions
+        # API v2 for engagements and interactions
         self.twitter_api_v2 = tweepy.Client(bearer_token=TWITTER_BEARER_TOKEN,
                                             consumer_key=TWITTER_API_KEY,
                                             consumer_secret=TWITTER_API_SECRET,
@@ -183,8 +193,7 @@ class TwitterBot:
             file.write(f"{mention_id}\n")
         logging.info(f"Saved replied mention ID: {mention_id}")
 
-import random
-
+# Display inventory and update last check time
 def show_inventory(username, tweet_id):
     conn = sqlite3.connect("engagements.db")
     cursor = conn.cursor()
@@ -207,7 +216,7 @@ def show_inventory(username, tweet_id):
     inventory = cursor.fetchall()
     inventory_message = ", ".join([f"{item}: {qty}" for item, qty in inventory]) if inventory else "No items yet!"
 
-    # Add a slight variation to avoid duplicate error
+    # Add slight variation to avoid duplicate error
     phrases = [
         f"@{username}, here’s your current inventory: {inventory_message}",
         f"@{username}, your stash so far: {inventory_message}",
@@ -223,7 +232,6 @@ def show_inventory(username, tweet_id):
 
     bot.twitter_api_v2.create_tweet(text=response, in_reply_to_tweet_id=tweet_id)
     logging.info(f"Inventory check complete for @{username}. Inventory: {inventory_message}")
-
 
 # Scheduling tasks in separate threads
 def run_mentions_check():
