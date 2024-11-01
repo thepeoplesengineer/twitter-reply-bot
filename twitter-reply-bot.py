@@ -201,7 +201,7 @@ def respond_to_mention(self, mention):
 
 
 
-    def check_mentions_for_replies(self):
+def check_mentions_for_replies(self):
         logging.info("Checking for new mentions.")
         mentions = self.twitter_api_v2.get_users_mentions(id=self.twitter_me_id)
         replied_mentions = self.load_replied_mentions()
@@ -214,13 +214,13 @@ def respond_to_mention(self, mention):
 
         log_database_state()
 
-    def load_replied_mentions(self):
+def load_replied_mentions(self):
         if not os.path.exists(REPLIED_MENTIONS_FILE):
             return set()
         with open(REPLIED_MENTIONS_FILE, "r") as file:
             return set(line.strip() for line in file)
 
-    def save_replied_mention(self, mention_id):
+def save_replied_mention(self, mention_id):
         with open(REPLIED_MENTIONS_FILE, "a") as file:
             file.write(f"{mention_id}\n")
         logging.info(f"Saved replied mention ID: {mention_id}")
