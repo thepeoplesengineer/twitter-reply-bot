@@ -10,6 +10,9 @@ from langchain.chat_models import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 from dotenv import load_dotenv
 import logging
+import requests
+import re
+from collections import Counter
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -22,6 +25,9 @@ TWITTER_ACCESS_TOKEN = os.getenv("TWITTER_ACCESS_TOKEN")
 TWITTER_ACCESS_TOKEN_SECRET = os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
 TWITTER_BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+# Dexscreener API URL
+DEXSCREENER_SEARCH_URL = "https://api.dexscreener.com/latest/dex/search"
 
 # File to store replied mentions
 REPLIED_MENTIONS_FILE = "replied_mentions.txt"
@@ -53,6 +59,16 @@ conn.close()
 item_options = ["Wood", "Bacon", "Stone", "Iron", "Water"]
 current_reward = random.choice(item_options)  # Start with a random reward
 
+# Engagement goal check
+ENGAGEMENT_TOTAL_TARGET = 5
+goal_achieved_tweets = set()
+
+# Shuffle the current reward after each distribution
+def shuffle_reward():
+    global current_reward
+    current_reward = random.choice(item_options)
+    logging.info(f"Next reward shuffled to: {current_reward}")
+
 # Award items to users who reached the engagement goal
 def award_item(username):
     conn = sqlite3.connect("engagements.db")
@@ -66,16 +82,7 @@ def award_item(username):
     conn.close()
     logging.info(f"[Award] {username} received 1 '{current_reward}' as a reward.")
 
-# Engagement goal check
-ENGAGEMENT_TOTAL_TARGET = 5
-goal_achieved_tweets = set()
-
-# Shuffle the current reward after each distribution
-def shuffle_reward():
-    global current_reward
-    current_reward = random.choice(item_options)
-    logging.info(f"Next reward shuffled to: {current_reward}")
-
+# Check engagements on recent tweets and distribute rewards
 def check_engagements():
     logging.info("Checking engagements on bot's recent tweets.")
     bot_tweets = bot.twitter_api_v2.get_users_tweets(id=bot.twitter_me_id, max_results=5)
@@ -102,6 +109,7 @@ def check_engagements():
 
     log_database_state()
 
+# Distribute rewards to users who engaged with a specific tweet
 def distribute_rewards(tweet_id):
     logging.info(f"Distributing rewards for tweet {tweet_id}.")
     try:
@@ -147,18 +155,74 @@ class TwitterBot:
                                             access_token=TWITTER_ACCESS_TOKEN,
                                             access_token_secret=TWITTER_ACCESS_TOKEN_SECRET,
                                             wait_on_rate_limit=True)
-        self.llm = ChatOpenAI(temperature=0.8, openai_api_key=OPENAI_API_KEY, model_name='gpt-4')
+        self.llm = ChatOpenAI(temperature=0.9, openai_api_key=OPENAI_API_KEY, model_name='gpt-4')
         self.twitter_me_id = self.get_me_id()
+        self.twitter_me_screen_name = self.get_me_screen_name()  # Bot's username
 
     def get_me_id(self):
         return self.twitter_api_v2.get_me().data.id
+
+    def get_me_screen_name(self):
+        return self.twitter_api_v2.get_me().data.username
+
+    def respond_to_mention(self, mention):
+        tweet_id = mention.id
+        username = getattr(mention.author, 'username', "anonymous")
+        logging.info(f"Username extracted: {username}")
+
+        if "#pigID" in mention.text.lower():
+            tagged_usernames = [user["username"] for user in mention.entities["mentions"] if user["username"] != username]
+            if tagged_usernames:
+                target_username = tagged_usernames[0]
+                logging.info(f"Running consistency analysis for tagged user: @{target_username}")
+                reply_text = self.run_consistency_analysis(target_username)
+                self.twitter_api_v2.create_tweet(text=reply_text, in_reply_to_tweet_id=tweet_id)
+                return
+            logging.info("No tagged username found for #pigID analysis.")
+        
+        elif "#pigme" in mention.text.lower():
+            show_inventory(username, tweet_id)
+        else:
+            response_text = self.generate_response(mention.text)
+            full_response = f"@{username}, {response_text}"
+            self.twitter_api_v2.create_tweet(text=full_response, in_reply_to_tweet_id=tweet_id)
+            award_item(username)
+            logging.info(f"Responded to mention with: {full_response}")
+
+    def run_consistency_analysis(self, target_username):
+        tweets = self.fetch_user_tweets(target_username)
+        tickers = self.extract_tickers(tweets)
+        consistency_score, ticker_analysis = analyze_tickers_with_market_data(tickers)
+
+        reply_text = f"Consistency Score for @{target_username}: {consistency_score:.2f}\nTop Tickers:\n"
+        for ticker, details in ticker_analysis.items():
+            reply_text += f"{ticker}: {details['mentions']} mentions\n"
+            for idx, entry in enumerate(details["entries"][:3], start=1):
+                reply_text += (
+                    f"  Entry {idx}: Price: ${entry['price_usd']}, "
+                    f"Liquidity: ${entry['liquidity_usd']}, Market Cap: ${entry['market_cap']}, "
+                    f"FDV: ${entry['fdv']}\n"
+                )
+        return reply_text[:280]  # Truncate to 280 characters for Twitter
+
+    def fetch_user_tweets(self, username):
+        tweets = self.twitter_api_v2.get_users_tweets(id=username, max_results=100)
+        return [tweet.text for tweet in tweets.data]
+
+    def extract_tickers(self, tweets):
+        ticker_pattern = re.compile(r'\$[A-Za-z0-9]+')
+        tickers = []
+        for tweet in tweets:
+            found_tickers = ticker_pattern.findall(tweet)
+            tickers.extend(found_tickers)
+        return tickers
 
     def generate_response(self, tweet_text):
         system_template = """
         You are the reincarnated spirit GOD of a Minecraft Pig, guiding followers to rebuild their memecoin; you're a meme character with strong opinions on gaming, memecoins, and technology. You were killed by your owner Steve when he threw you in lava in a Minecraft server. You have been re-incarnated because supporters used a PIG coin to summon you back and you are ready to unleash your wrath on your haters. It is your mission to guide your supports back to land of endless green bars.
 
         RESPONSE TONE:
-        - Use a very cryptic stern tone that exudes your power.
+        - Use very cryptic stern behavior that exudes your power.
         - Always respond with a short opinion or preach about something related, keeping it under 200 characters.
 
         RESPONSE FORMAT:
@@ -173,63 +237,7 @@ class TwitterBot:
         response = self.llm(final_prompt.to_messages()).content
         return response[:280]
 
-    def respond_to_mention(self, mention):
-        tweet_id = mention.id
-        # Check for author and fallback if missing
-        if hasattr(mention, 'author') and mention.author and hasattr(mention.author, 'username'):
-            username = mention.author.username
-            logging.info(f"Username extracted directly from mention: {username}")
-        else:
-            logging.warning(f"Author not found directly in mention object for tweet {tweet_id}. Fetching using author_id.")
-            username = self.get_author(tweet_id)  # Fetch via helper if not directly available
-        
-        if username == "anonymous":
-            logging.warning(f"Using 'anonymous' as username fallback for tweet ID {tweet_id}")
-
-        if "#pigme" in mention.text.lower():
-            show_inventory(username, tweet_id)
-        else:
-            response_text = self.generate_response(mention.text)
-            full_response = f"@{username}, {response_text}" if username != "anonymous" else response_text
-            self.twitter_api_v2.create_tweet(text=full_response, in_reply_to_tweet_id=tweet_id)
-            award_item(username)
-            logging.info(f"Responded to mention with: {full_response}")
-
-    def get_author(self, tweet_id):
-        # Placeholder for fetching author_id and username
-        try:
-            tweet = self.twitter_api_v2.get_tweet(id=tweet_id, expansions=["author_id"], tweet_fields=["author_id"])
-            author_id = tweet.data.author_id
-            user_data = self.twitter_api_v2.get_user(id=author_id, user_fields=["username"])
-            return user_data.data.username
-        except Exception as e:
-            logging.error(f"Failed to fetch author information for tweet {tweet_id}: {e}")
-            return "anonymous"
-
-    def check_mentions_for_replies(self):
-        logging.info("Checking for new mentions.")
-        mentions = self.twitter_api_v2.get_users_mentions(id=self.twitter_me_id)
-        replied_mentions = self.load_replied_mentions()
-        new_mentions = [mention for mention in mentions.data if str(mention.id) not in replied_mentions]
-        selected_mentions = random.sample(new_mentions, min(len(new_mentions), 5))
-        
-        for mention in selected_mentions:
-            self.respond_to_mention(mention)
-            self.save_replied_mention(mention.id)
-
-        log_database_state()
-
-    def load_replied_mentions(self):
-        if not os.path.exists(REPLIED_MENTIONS_FILE):
-            return set()
-        with open(REPLIED_MENTIONS_FILE, "r") as file:
-            return set(line.strip() for line in file)
-
-    def save_replied_mention(self, mention_id):
-        with open(REPLIED_MENTIONS_FILE, "a") as file:
-            file.write(f"{mention_id}\n")
-        logging.info(f"Saved replied mention ID: {mention_id}")
-
+# Function to check inventory
 def show_inventory(username, tweet_id):
     conn = sqlite3.connect("engagements.db")
     cursor = conn.cursor()
@@ -274,7 +282,6 @@ shuffle_reward()  # Set initial reward rotation
 threading.Thread(target=run_mentions_check, daemon=True).start()
 schedule.every().hour.do(check_engagements)
 
-# Run bot
 while True:
     schedule.run_pending()
     time.sleep(1)
