@@ -3,11 +3,9 @@ from utils.reward_utils import award_item
 from utils.logging_config import logging
 from utils.db import show_inventory
 
-
-def handle_mention(mention, twitter_api_v2):
+def handle_mention(mention, twitter_api_v2, username):
     """Handle a mention by responding based on hashtags or by generating a response."""
     tweet_id = mention.id
-    username = mention.author.username if mention.author else "anonymous"
     logging.info(f"Processing mention from @{username} with tweet ID {tweet_id}")
 
     if "#pigID" in mention.text.lower():
@@ -19,7 +17,7 @@ def handle_mention(mention, twitter_api_v2):
             twitter_api_v2.create_tweet(text=reply_text, in_reply_to_tweet_id=tweet_id)
         else:
             logging.info("No tagged username found for #pigID analysis.")
-    
+
     elif "#pigme" in mention.text.lower():
         show_inventory(username, tweet_id, twitter_api_v2)
     else:
@@ -28,6 +26,7 @@ def handle_mention(mention, twitter_api_v2):
         twitter_api_v2.create_tweet(text=full_response, in_reply_to_tweet_id=tweet_id)
         award_item(username)
         logging.info(f"Responded to mention with: {full_response}")
+
 
 
 def generate_response(tweet_text):

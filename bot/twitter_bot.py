@@ -18,7 +18,7 @@ class TwitterBot:
                                             access_token_secret=TWITTER_ACCESS_TOKEN_SECRET,
                                             wait_on_rate_limit=True)
         self.twitter_me_id = self.get_me_id()
-        self.replied_mentions = self.load_replied_mentions()  # Load replied mentions on initialization
+        self.replied_mentions = self.load_replied_mentions()
 
     def get_me_id(self):
         """Retrieve the bot's Twitter user ID."""
@@ -44,13 +44,13 @@ class TwitterBot:
         logging.info(f"Saved replied mention ID: {mention_id}")
 
     def get_username_by_author_id(self, author_id):
-        """Fetch username for a given author ID."""
+        """Retrieve the username by author ID."""
         try:
-            user = self.twitter_api_v2.get_user(id=author_id, user_fields=["username"])
-            return user.data.username if user.data else "unknown"
+            user = self.twitter_api_v2.get_user(id=author_id, user_fields=["username"]).data
+            return user.username
         except Exception as e:
             logging.error(f"Failed to retrieve username for author ID {author_id}: {e}")
-            return "unknown"
+            return "anonymous"
 
     def respond_to_mentions(self):
         """Fetch new mentions and respond to them."""
@@ -71,7 +71,7 @@ class TwitterBot:
                     logging.info(f"Handling mention from @{username} (ID: {mention_id})")
                     
                     # Handle the mention and add the mention ID to the set
-                    handle_mention(mention, self.twitter_api_v2)
+                    handle_mention(mention, self.twitter_api_v2, username)
                     self.save_replied_mention(mention_id)
                     self.replied_mentions.add(mention_id)
                 else:
@@ -79,4 +79,5 @@ class TwitterBot:
         
         except Exception as e:
             logging.error(f"Error while responding to mentions: {e}", exc_info=True)
+
 
