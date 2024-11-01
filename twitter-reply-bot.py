@@ -43,12 +43,11 @@ cursor.execute("""
         item TEXT NOT NULL,
         quantity INTEGER DEFAULT 0,
         last_checked TIMESTAMP,
-        UNIQUE(username, item)  -- Ensures each username-item pair is unique
+        UNIQUE(username, item)
     )
 """)
 conn.commit()
 conn.close()
-
 
 # Define items and rotating reward
 item_options = ["Wood", "Bacon", "Stone", "Iron", "Water"]
@@ -68,7 +67,7 @@ def award_item(username):
     logging.info(f"[Award] {username} received 1 '{current_reward}' as a reward.")
 
 # Engagement goal check
-ENGAGEMENT_TOTAL_TARGET = 5  # Trigger reward distribution at 5 total engagements
+ENGAGEMENT_TOTAL_TARGET = 5
 goal_achieved_tweets = set()
 
 # Shuffle the current reward after each distribution
@@ -87,7 +86,6 @@ def check_engagements():
             continue  # Skip tweets that already reached engagement goals
 
         try:
-            # Get metrics for the tweet
             tweet_metrics = bot.twitter_api_v2.get_tweet(tweet_id, tweet_fields="public_metrics").data["public_metrics"]
             total_engagements = tweet_metrics["like_count"] + tweet_metrics["retweet_count"] + tweet_metrics["reply_count"]
             logging.info(f"Tweet {tweet_id} total engagements: {total_engagements}")
@@ -140,11 +138,9 @@ def log_database_state():
 
 class TwitterBot:
     def __init__(self):
-        # API for v1 User Context
         self.twitter_api_v1 = tweepy.API(tweepy.OAuth1UserHandler(
             TWITTER_API_KEY, TWITTER_API_SECRET, TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET
         ))
-        # API v2 for general interactions
         self.twitter_api_v2 = tweepy.Client(bearer_token=TWITTER_BEARER_TOKEN,
                                             consumer_key=TWITTER_API_KEY,
                                             consumer_secret=TWITTER_API_SECRET,
@@ -157,7 +153,6 @@ class TwitterBot:
     def get_me_id(self):
         return self.twitter_api_v2.get_me().data.id
 
-    # Generate responses using the ChatGPT model
     def generate_response(self, tweet_text):
         system_template = """
             You are the reincarnated spirit GOD of a Minecraft Pig, guiding followers to rebuild their memecoin; you're a meme character with strong opinions on gaming, memecoins, and technology. You were killed by your owner Steve when he threw you in lava in a Minecraft server. You have been re-incarnated because supporters used a PIG coin to summon you back and you are ready to unleash your wrath on your haters. It is your mission to guide your supports back to land of endless green bars.
@@ -261,3 +256,4 @@ schedule.every().hour.do(check_engagements)
 while True:
     schedule.run_pending()
     time.sleep(1)
+
