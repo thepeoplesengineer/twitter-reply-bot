@@ -4,7 +4,9 @@ import sqlite3
 import logging
 from datetime import datetime, timedelta
 
+# Database setup function
 def setup_database():
+    """Set up the engagements and inventory tables if they do not exist."""
     conn = sqlite3.connect("engagements.db")
     cursor = conn.cursor()
     cursor.execute("""
@@ -27,9 +29,12 @@ def setup_database():
     conn.commit()
     conn.close()
 
+# Log the current state of the database tables for debugging
 def log_database_state():
+    """Log the contents of the engagements and inventory tables for debugging purposes."""
     conn = sqlite3.connect("engagements.db")
     cursor = conn.cursor()
+    
     logging.info("[Database] Current engagements:")
     cursor.execute("SELECT * FROM engagements")
     engagements = cursor.fetchall()
@@ -44,6 +49,23 @@ def log_database_state():
 
     conn.close()
 
+# Log the entire inventory table to see the current state of resources for each user
+def log_inventory_state():
+    """Log the entire inventory table to monitor user resources."""
+    conn = sqlite3.connect("engagements.db")
+    cursor = conn.cursor()
+
+    logging.info("[Inventory] Current state of inventory:")
+    cursor.execute("SELECT username, item, quantity FROM inventory")
+    inventory = cursor.fetchall()
+
+    for entry in inventory:
+        username, item, quantity = entry
+        logging.info(f"User: {username}, Item: {item}, Quantity: {quantity}")
+
+    conn.close()
+
+# Retrieve and display a user's inventory
 def show_inventory(username, tweet_id, twitter_api_v2):
     """
     Sends the user's inventory info via DM and replies to the original tweet to confirm the DM.
@@ -77,19 +99,18 @@ def show_inventory(username, tweet_id, twitter_api_v2):
 
     # Send DM with inventory information using Twitter API v2 endpoint
     try:
-        # First, retrieve user ID from username
+        # Retrieve user ID from username
         user = twitter_api_v2.get_user(username=username)
         user_id = user.data.id
         
-        # Send the DM to the user
+        # Construct and send the DM message
         dm_endpoint = f"https://api.twitter.com/2/dm_conversations/with/{user_id}/messages"
-        message_data = {
-            "text": response_dm
-        }
-        response = twitter_api_v2.request("POST", dm_endpoint, json=message_data)
+        message_data = {"text": response_dm}
+        
+        response = twitter_api_v2._make_request("POST", dm_endpoint, json=message_data)
         
         if response.status_code == 201:
-            # Reply to the mention confirming that the DM was sent
+            # Confirm the DM was sent
             confirmation_reply = f"@{username}, your inventory info has been DM'd."
             twitter_api_v2.create_tweet(text=confirmation_reply, in_reply_to_tweet_id=tweet_id)
             logging.info(f"Inventory DM sent to @{username} with message: {response_dm}")
@@ -98,3 +119,24 @@ def show_inventory(username, tweet_id, twitter_api_v2):
 
     except Exception as e:
         logging.error(f"Failed to send DM to @{username}: {e}")
+
+# Fetch all records from the engagements table
+def get_all_engagements():
+    """Fetch all records from the engagements table."""
+    conn = sqlite3.connect("engagements.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM engagements")
+    engagements = cursor.fetchall()
+    conn.close()
+    return engagements
+
+# Fetch all records from the inventory table
+def get_all_inventory():
+    """Fetch all records from the inventory table."""
+    conn = sqlite3.connect("engagements.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM inventory")
+    inventory = cursor.fetchall()
+    conn.close()
+    return inventory
+

@@ -79,5 +79,22 @@ class TwitterBot:
         
         except Exception as e:
             logging.error(f"Error while responding to mentions: {e}", exc_info=True)
+    
+    def get_recent_mentions(self, start_time, end_time):
+        """Fetch mentions within a specific timeframe."""
+        try:
+            # Pull the latest 100 mentions
+            mentions = self.twitter_api_v2.get_users_mentions(id=self.twitter_me_id, max_results=30)
+            recent_mentions = []
+            for mention in mentions.data:
+                # Convert created_at to a datetime object and filter by time frame
+                mention_time = datetime.strptime(mention.created_at, '%Y-%m-%dT%H:%M:%S.%fZ')
+                if start_time <= mention_time <= end_time:
+                    recent_mentions.append({"text": mention.text, "created_at": mention_time})
+            logging.info(f"Found {len(recent_mentions)} recent mentions within the specified time frame.")
+            return recent_mentions
+        except Exception as e:
+            logging.error(f"Error fetching recent mentions: {e}")
+            return []
 
 
