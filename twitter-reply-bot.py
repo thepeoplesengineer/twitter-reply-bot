@@ -242,6 +242,7 @@ def show_inventory(username, tweet_id):
         hours, remainder = divmod(remaining_time.seconds, 3600)
         minutes = remainder // 60
         response = f"@{username}, check your inventory again in {hours} hours and {minutes} minutes."
+        inventory_message = None  # No inventory message in this case
     else:
         # Fetch the user's inventory items and quantities
         cursor.execute("SELECT item, quantity FROM inventory WHERE username = ?", (username,))
@@ -249,6 +250,7 @@ def show_inventory(username, tweet_id):
         
         if not inventory:
             response = f"@{username}, no items in your inventory yet! Engage more to collect rewards."
+            inventory_message = "No items"  # Set inventory_message for logging
         else:
             # Format the inventory details into a readable message
             inventory_message = ", ".join([f"{item}: {qty}" for item, qty in inventory])
@@ -268,7 +270,8 @@ def show_inventory(username, tweet_id):
     except tweepy.errors.TweepyException as e:
         logging.error(f"[Error] Failed to reply with inventory for {username}: {e}")
     
-    logging.info(f"Inventory check complete for @{username}. Inventory: {inventory_message if inventory else 'No items'}")
+    # Log the inventory check
+    logging.info(f"Inventory check complete for @{username}. Inventory: {inventory_message if inventory_message else 'No items'}")
 
 # Scheduling tasks in separate threads
 def run_mentions_check():
