@@ -1,16 +1,15 @@
-# main.py
-
 from bot.twitter_bot import TwitterBot
 from utils.logging_config import setup_logging
 from utils.db import setup_database
 from utils.reward_utils import shuffle_reward
+from utils.schedule_tasks import check_engagements  # Ensure this import is correct
 import schedule
 import threading
 import time
 
 def run_mentions_check():
     while True:
-        bot.check_mentions_for_replies()
+        bot.respond_to_mentions()  # Updated to match the function name in TwitterBot
         time.sleep(2700)  # Run every 45 minutes
 
 if __name__ == "__main__":
