@@ -175,23 +175,29 @@ class TwitterBot:
 
     def respond_to_mention(self, mention):
         try:
-            logging.info(f"Complete Mention Object: {vars(mention)}")  # Safe log mention details
+            author_id = mention.author_id
+            username = "anonymous"  # Default to "anonymous" if username is unavailable
+            if author_id:
+                author_user = self.twitter_api_v2.get_user(id=author_id)
+                username = author_user.data.username if author_user.data else "anonymous"
+            logging.info(f"Username extracted: {username}")
         except Exception as e:
-            logging.warning(f"Unable to log complete mention object: {e}")
+            logging.warning(f"Could not retrieve username for author_id {mention.author_id}: {e}")
         
-        username = getattr(mention.author, 'username', "anonymous")
-        if username == "anonymous":
-            logging.warning("Could not retrieve username; defaulting to 'anonymous'.")
-
         tweet_id = mention.id
-        if "#pigme" in mention.text.lower():
+        mention_text = mention.text
+
+        if "#pigme" in mention_text.lower():
             show_inventory(username, tweet_id)
         else:
-            response_text = self.generate_response(mention.text)
+            response_text = self.generate_response(mention_text)
             full_response = f"@{username}, {response_text}" if username != "anonymous" else response_text
-            self.twitter_api_v2.create_tweet(text=full_response, in_reply_to_tweet_id=tweet_id)
-            award_item(username)
-            logging.info(f"Responded to mention with: {full_response}")
+            try:
+                self.twitter_api_v2.create_tweet(text=full_response, in_reply_to_tweet_id=tweet_id)
+                award_item(username)
+                logging.info(f"Responded to mention with: {full_response}")
+            except tweepy.errors.Forbidden as e:
+                logging.error(f"Failed to reply to mention: {e}")
 
     def check_mentions_for_replies(self):
         logging.info("Checking for new mentions.")
