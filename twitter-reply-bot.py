@@ -167,7 +167,7 @@ class TwitterBot:
 
     def respond_to_mention(self, mention):
         tweet_id = mention.id
-        username = getattr(mention.author, 'username', "anonymous")
+        username = self.get_author_username(mention)
         logging.info(f"Username extracted: {username}")
 
         if "#pigID" in mention.text.lower():
@@ -188,6 +188,15 @@ class TwitterBot:
             self.twitter_api_v2.create_tweet(text=full_response, in_reply_to_tweet_id=tweet_id)
             award_item(username)
             logging.info(f"Responded to mention with: {full_response}")
+
+    def get_author_username(self, mention):
+        # Fetch username based on author_id
+        try:
+            user_data = self.twitter_api_v2.get_user(id=mention.author_id, user_fields=["username"])
+            return user_data.data.username
+        except Exception as e:
+            logging.error(f"Failed to fetch username for mention ID {mention.id}: {e}")
+            return "anonymous"
 
     def check_mentions_for_replies(self):
         logging.info("Checking for new mentions.")
@@ -261,7 +270,40 @@ class TwitterBot:
         response = self.llm(final_prompt.to_messages()).content
         return response[:280]
 
-# Function to check inventory
+def analyze_tickers_with_market_data(tickers):
+    ticker_counts = Counter(tickers)
+    ticker_analysis = {}
+    
+    for ticker, mentions in ticker_counts.items():
+        response = requests.get(f"{DEXSCREENER_SEARCH_URL}?q={ticker}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            entries = []
+            for pair in data.get("pairs", [])[:3]:
+                entry = {
+                    "price_usd": pair.get("priceUsd"),
+                    "liquidity_usd": pair["liquidity"].get("usd", 0),
+                    "market_cap": pair.get("marketCap", 0),
+                    "fdv": pair.get("fdv", 0)
+                }
+                entries.append(entry)
+            ticker_analysis[ticker] = {
+                "mentions": mentions,
+                "entries": entries
+            }
+        else:
+            logging.error(f"Failed to fetch data for ticker {ticker} from Dexscreener")
+
+    if ticker_counts:
+        most_mentioned_ticker = max(ticker_counts, key=ticker_counts.get)
+        total_mentions = sum(ticker_counts.values())
+        consistency_score = ticker_counts[most_mentioned_ticker] / total_mentions
+    else:
+        consistency_score = 0
+
+    return consistency_score, ticker_analysis
+
 def show_inventory(username, tweet_id):
     conn = sqlite3.connect("engagements.db")
     cursor = conn.cursor()
