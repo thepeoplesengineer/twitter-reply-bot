@@ -264,11 +264,16 @@ def show_inventory(username, tweet_id):
     conn.commit()
     conn.close()
     
-    # Send the response tweet with the inventory status
+    # Try to send the response tweet with the inventory status
     try:
         bot.twitter_api_v2.create_tweet(text=response, in_reply_to_tweet_id=tweet_id)
-    except tweepy.errors.TweepyException as e:
-        logging.error(f"[Error] Failed to reply with inventory for {username}: {e}")
+    except tweepy.errors.Forbidden as e:
+        if "duplicate content" in str(e):
+            # Add a unique element to make it different and avoid duplicate content
+            unique_response = response + f" {random.choice(['🔥', '💎', '🚀'])}"
+            bot.twitter_api_v2.create_tweet(text=unique_response, in_reply_to_tweet_id=tweet_id)
+        else:
+            logging.error(f"[Error] Failed to reply with inventory for {username}: {e}")
     
     # Log the inventory check
     logging.info(f"Inventory check complete for @{username}. Inventory: {inventory_message if inventory_message else 'No items'}")
