@@ -40,13 +40,15 @@ cursor.execute("""
 cursor.execute("""
     CREATE TABLE IF NOT EXISTS inventory (
         username TEXT NOT NULL,
-        item TEXT,
+        item TEXT NOT NULL,
         quantity INTEGER DEFAULT 0,
-        last_checked TIMESTAMP
+        last_checked TIMESTAMP,
+        UNIQUE(username, item)  -- Ensures each username-item pair is unique
     )
 """)
 conn.commit()
 conn.close()
+
 
 # Define items and rotating reward
 item_options = ["Wood", "Bacon", "Stone", "Iron", "Water"]
