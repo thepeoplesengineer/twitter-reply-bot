@@ -48,34 +48,32 @@ cursor.execute("""
 conn.commit()
 conn.close()
 
-# Define items and daily rotating rewards
+# Define items and rotating reward
 item_options = ["Wood", "Bacon", "Stone", "Iron", "Water"]
-reward_map = {"like": None, "retweet": None, "comment": None}
+current_reward = random.choice(item_options)  # Start with a random reward
 
-# Function to rotate rewards daily
-def rotate_rewards():
-    daily_items = random.sample(item_options, 3)
-    reward_map["like"], reward_map["retweet"], reward_map["comment"] = daily_items
-    logging.info(f"Today's rewards: Like = {reward_map['like']}, Retweet = {reward_map['retweet']}, Comment = {reward_map['comment']}")
-
-# Awarding items for engagements
-def award_item(username, interaction_type):
-    item = reward_map.get(interaction_type)
-    if item:
-        conn = sqlite3.connect("engagements.db")
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO inventory (username, item, quantity)
-            VALUES (?, ?, 1)
-            ON CONFLICT(username, item) DO UPDATE SET quantity = quantity + 1
-        """, (username, item))
-        conn.commit()
-        conn.close()
-        logging.info(f"[Award] {username} received 1 '{item}' for a '{interaction_type}'.")
+# Award items to users who reached the engagement goal
+def award_item(username):
+    conn = sqlite3.connect("engagements.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO inventory (username, item, quantity)
+        VALUES (?, ?, 1)
+        ON CONFLICT(username, item) DO UPDATE SET quantity = quantity + 1
+    """, (username, current_reward))
+    conn.commit()
+    conn.close()
+    logging.info(f"[Award] {username} received 1 '{current_reward}' as a reward.")
 
 # Engagement goal check
 ENGAGEMENT_TOTAL_TARGET = 5  # Trigger reward distribution at 5 total engagements
 goal_achieved_tweets = set()
+
+# Shuffle the current reward after each distribution
+def shuffle_reward():
+    global current_reward
+    current_reward = random.choice(item_options)
+    logging.info(f"Next reward shuffled to: {current_reward}")
 
 def check_engagements():
     logging.info("Checking engagements on bot's recent tweets.")
@@ -89,12 +87,7 @@ def check_engagements():
         try:
             # Get metrics for the tweet
             tweet_metrics = bot.twitter_api_v2.get_tweet(tweet_id, tweet_fields="public_metrics").data["public_metrics"]
-            likes = tweet_metrics["like_count"]
-            retweets = tweet_metrics["retweet_count"]
-            replies = tweet_metrics["reply_count"]
-
-            # Calculate total engagements
-            total_engagements = likes + retweets + replies
+            total_engagements = tweet_metrics["like_count"] + tweet_metrics["retweet_count"] + tweet_metrics["reply_count"]
             logging.info(f"Tweet {tweet_id} total engagements: {total_engagements}")
 
             # Check if total engagement target has been met
@@ -102,6 +95,7 @@ def check_engagements():
                 goal_achieved_tweets.add(tweet_id)
                 logging.info(f"Tweet {tweet_id} has met the total engagement target of {ENGAGEMENT_TOTAL_TARGET}!")
                 distribute_rewards(tweet_id)
+                shuffle_reward()  # Shuffle the reward after each distribution
 
         except tweepy.errors.TweepyException as e:
             logging.error(f"[Error] Failed to fetch engagements for tweet {tweet_id}: {e}")
@@ -114,14 +108,13 @@ def distribute_rewards(tweet_id):
         mentions = bot.twitter_api_v2.get_users_mentions(id=tweet_id)
         engaged_users = set()
         for mention in mentions.data:
-            user_id = mention.author_id
             username = mention.author.username if mention.author and hasattr(mention.author, 'username') else 'Unknown'
             if username != 'Unknown':
                 engaged_users.add(username)
 
         for username in engaged_users:
-            award_item(username, "goal_reward")
-            logging.info(f"Awarded 'goal_reward' to user {username} for engagement on tweet {tweet_id}")
+            award_item(username)
+            logging.info(f"Awarded '{current_reward}' to user {username} for engagement on tweet {tweet_id}")
     except tweepy.errors.TweepyException as e:
         logging.error(f"[Error] Unable to distribute rewards for tweet {tweet_id}: {e}")
 
@@ -184,26 +177,19 @@ class TwitterBot:
         response = self.llm(final_prompt).content
         return response[:280]
 
-def respond_to_mention(self, mention):
-    logging.info(f"Mention object details: {mention}")  # Log the entire mention object for debugging
-    username = mention.user.username if hasattr(mention, 'user') and hasattr(mention.user, 'username') else None
-    tweet_id = mention.id
+    def respond_to_mention(self, mention):
+        logging.info(f"Mention object details: {mention}")
+        username = mention.user.username if hasattr(mention, 'user') and hasattr(mention.user, 'username') else None
+        tweet_id = mention.id
 
-    if "#pigme" in mention.text.lower():
-        show_inventory(username if username else "anonymous", tweet_id)
-    else:
-        response_text = self.generate_response(mention.text)
-        
-        # Conditionally include username if available
-        if username:
-            full_response = f"@{username}, {response_text}"
+        if "#pigme" in mention.text.lower():
+            show_inventory(username if username else "anonymous", tweet_id)
         else:
-            full_response = response_text  # No mention if username is unavailable
-        
-        self.twitter_api_v2.create_tweet(text=full_response, in_reply_to_tweet_id=tweet_id)
-        award_item(username if username else "anonymous", "mention")
-        logging.info(f"Responded to mention with: {full_response}")
-
+            response_text = self.generate_response(mention.text)
+            full_response = f"@{username}, {response_text}" if username else response_text
+            self.twitter_api_v2.create_tweet(text=full_response, in_reply_to_tweet_id=tweet_id)
+            award_item(username if username else "anonymous")
+            logging.info(f"Responded to mention with: {full_response}")
 
     def check_mentions_for_replies(self):
         logging.info("Checking for new mentions.")
@@ -256,7 +242,6 @@ def show_inventory(username, tweet_id):
     bot.twitter_api_v2.create_tweet(text=response, in_reply_to_tweet_id=tweet_id)
     logging.info(f"Inventory check complete for @{username}. Inventory: {inventory_message if inventory else 'No items'}")
 
-
 # Scheduling tasks in separate threads
 def run_mentions_check():
     while True:
@@ -264,11 +249,10 @@ def run_mentions_check():
         time.sleep(2700)  # Run every 45 minutes
 
 bot = TwitterBot()
-rotate_rewards()  # Set initial reward rotation
+shuffle_reward()  # Set initial reward rotation
 
 # Start mention check and engagement check in separate threads
 threading.Thread(target=run_mentions_check, daemon=True).start()
-schedule.every().day.at("00:00").do(rotate_rewards)
 schedule.every().hour.do(check_engagements)
 
 # Run bot
