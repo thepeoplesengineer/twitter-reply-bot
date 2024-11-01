@@ -65,6 +65,3 @@ class TwitterBot:
         
         except Exception as e:
             logging.error(f"Error while responding to mentions: {e}", exc_info=True)
-
-
-
