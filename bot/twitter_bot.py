@@ -43,18 +43,32 @@ class TwitterBot:
             file.write(f"{mention_id}\n")
         logging.info(f"Saved replied mention ID: {mention_id}")
 
+    def get_username_by_author_id(self, author_id):
+        """Fetch username for a given author ID."""
+        try:
+            user = self.twitter_api_v2.get_user(id=author_id, user_fields=["username"])
+            return user.data.username if user.data else "unknown"
+        except Exception as e:
+            logging.error(f"Failed to retrieve username for author ID {author_id}: {e}")
+            return "unknown"
+
     def respond_to_mentions(self):
         """Fetch new mentions and respond to them."""
         logging.info("Checking for new mentions.")
         try:
-            mentions = self.twitter_api_v2.get_users_mentions(id=self.twitter_me_id)
+            # Retrieve mentions with author_id expansion
+            mentions = self.twitter_api_v2.get_users_mentions(id=self.twitter_me_id, expansions="author_id")
             
             for mention in mentions.data:
                 mention_id = mention.id
                 
                 # Check if we have already replied to this mention
                 if mention_id not in self.replied_mentions:
-                    logging.info(f"Handling mention from @{mention.author.username} (ID: {mention_id})")
+                    # Retrieve username using author_id from includes
+                    author_id = mention.author_id
+                    username = self.get_username_by_author_id(author_id)
+                    
+                    logging.info(f"Handling mention from @{username} (ID: {mention_id})")
                     
                     # Handle the mention and add the mention ID to the set
                     handle_mention(mention, self.twitter_api_v2)
@@ -65,3 +79,4 @@ class TwitterBot:
         
         except Exception as e:
             logging.error(f"Error while responding to mentions: {e}", exc_info=True)
+
