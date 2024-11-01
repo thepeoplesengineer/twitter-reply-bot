@@ -179,28 +179,27 @@ class TwitterBot:
         return response[:280]
 
 
-    def respond_to_mention(self, mention):
-        logging.info(f"Mention object details: {mention}")
-        username = mention.user.username if hasattr(mention, 'user') and hasattr(mention.user, 'username') else None
-        tweet_id = mention.id
+def respond_to_mention(self, mention):
+    # Log the mention structure for debugging
+    logging.info(f"Complete Mention Object: {mention.__dict__}")  # Log the dictionary form of mention for detailed structure
+    
+    # Attempt to retrieve username or fallback to 'anonymous'
+    username = getattr(mention.author, 'username', "anonymous")
+    if username == "anonymous":
+        logging.warning("Could not retrieve username; defaulting to 'anonymous'.")
 
-        if "#pigme" in mention.text.lower():
-            show_inventory(username if username else "anonymous", tweet_id)
-        else:
-            response_text = self.generate_response(mention.text)
-            full_response = f"@{username}, {response_text}" if username else response_text
-            
-            try:
-                self.twitter_api_v2.create_tweet(text=full_response, in_reply_to_tweet_id=tweet_id)
-            except tweepy.errors.Forbidden as e:
-                if "duplicate content" in str(e):
-                    full_response += f" {random.choice(['🔥', '💎', '🚀'])}"  # Adding unique emoji
-                    self.twitter_api_v2.create_tweet(text=full_response, in_reply_to_tweet_id=tweet_id)
-                else:
-                    logging.error(f"Failed to send tweet due to: {e}")
-            
-            award_item(username if username else "anonymous")
-            logging.info(f"Responded to mention with: {full_response}")
+    tweet_id = mention.id
+
+    if "#pigme" in mention.text.lower():
+        show_inventory(username, tweet_id)
+    else:
+        response_text = self.generate_response(mention.text)
+        full_response = f"@{username}, {response_text}" if username != "anonymous" else response_text
+        self.twitter_api_v2.create_tweet(text=full_response, in_reply_to_tweet_id=tweet_id)
+        award_item(username)
+        logging.info(f"Responded to mention with: {full_response}")
+
+
 
     def check_mentions_for_replies(self):
         logging.info("Checking for new mentions.")
