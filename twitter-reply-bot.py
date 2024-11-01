@@ -227,32 +227,50 @@ def show_inventory(username, tweet_id):
     conn = sqlite3.connect("engagements.db")
     cursor = conn.cursor()
     
+    # Retrieve the last checked time to prevent frequent inventory checks
     cursor.execute("SELECT last_checked FROM inventory WHERE username = ?", (username,))
     result = cursor.fetchone()
     now = datetime.utcnow()
     
+    # Check if the last inventory check was within the last 24 hours
     if result and result[0] and now < datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S") + timedelta(hours=24):
+        # Calculate remaining cooldown time
         remaining_time = (datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S") + timedelta(hours=24)) - now
         hours, remainder = divmod(remaining_time.seconds, 3600)
         minutes = remainder // 60
         response = f"@{username}, check your inventory again in {hours} hours and {minutes} minutes."
+        inventory_message = "No items"  # Explicitly set inventory_message for logging
     else:
+        # Fetch the user's inventory items and quantities
         cursor.execute("SELECT item, quantity FROM inventory WHERE username = ?", (username,))
         inventory = cursor.fetchall()
-        inventory_message = ", ".join([f"{item}: {qty}" for item, qty in inventory]) if inventory else "No items"
-        response = f"@{username}, here’s your current inventory: {inventory_message}"
-        cursor.execute("UPDATE inventory SET last_checked = ? WHERE username = ?", (now.strftime("%Y-%m-%d %H:%M:%S"), username))
+        
+        # Define inventory_message based on whether inventory is empty or has items
+        if not inventory:
+            response = f"@{username}, no items in your inventory yet! Engage more to collect rewards."
+            inventory_message = "No items"
+        else:
+            # Format the inventory details into a readable message
+            inventory_message = ", ".join([f"{item}: {qty}" for item, qty in inventory])
+            response = f"@{username}, here’s your current inventory: {inventory_message}"
+        
+        # Update the last checked time in the inventory database
+        cursor.execute("UPDATE inventory SET last_checked = ? WHERE username = ?", 
+                       (now.strftime("%Y-%m-%d %H:%M:%S"), username))
     
+    # Commit and close the connection
     conn.commit()
     conn.close()
     
+    # Try to send the response tweet with the inventory status
     try:
         bot.twitter_api_v2.create_tweet(text=response, in_reply_to_tweet_id=tweet_id)
     except tweepy.errors.Forbidden as e:
         unique_response = response + f" {random.choice(['🔥', '💎', '🚀'])}"
         bot.twitter_api_v2.create_tweet(text=unique_response, in_reply_to_tweet_id=tweet_id)
 
-    logging.info(f"Inventory check complete for @{username}. Inventory: {inventory_message if inventory else 'No items'}")
+    # Log the inventory check result
+    logging.info(f"Inventory check complete for @{username}. Inventory: {inventory_message}")
 
 # Scheduling tasks in separate threads
 def run_mentions_check():
