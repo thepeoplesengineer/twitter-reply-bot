@@ -174,30 +174,37 @@ class TwitterBot:
         return response[:280]
 
     def respond_to_mention(self, mention):
-        try:
-            author_id = mention.author_id
-            username = "anonymous"  # Default to "anonymous" if username is unavailable
-            if author_id:
-                author_user = self.twitter_api_v2.get_user(id=author_id)
-                username = author_user.data.username if author_user.data else "anonymous"
-            logging.info(f"Username extracted: {username}")
-        except Exception as e:
-            logging.warning(f"Could not retrieve username for author_id {mention.author_id}: {e}")
-        
         tweet_id = mention.id
-        mention_text = mention.text
+        # Check for author and fallback if missing
+        if hasattr(mention, 'author') and mention.author and hasattr(mention.author, 'username'):
+            username = mention.author.username
+            logging.info(f"Username extracted directly from mention: {username}")
+        else:
+            logging.warning(f"Author not found directly in mention object for tweet {tweet_id}. Fetching using author_id.")
+            username = self.get_author(tweet_id)  # Fetch via helper if not directly available
+        
+        if username == "anonymous":
+            logging.warning(f"Using 'anonymous' as username fallback for tweet ID {tweet_id}")
 
-        if "#pigme" in mention_text.lower():
+        if "#pigme" in mention.text.lower():
             show_inventory(username, tweet_id)
         else:
-            response_text = self.generate_response(mention_text)
+            response_text = self.generate_response(mention.text)
             full_response = f"@{username}, {response_text}" if username != "anonymous" else response_text
-            try:
-                self.twitter_api_v2.create_tweet(text=full_response, in_reply_to_tweet_id=tweet_id)
-                award_item(username)
-                logging.info(f"Responded to mention with: {full_response}")
-            except tweepy.errors.Forbidden as e:
-                logging.error(f"Failed to reply to mention: {e}")
+            self.twitter_api_v2.create_tweet(text=full_response, in_reply_to_tweet_id=tweet_id)
+            award_item(username)
+            logging.info(f"Responded to mention with: {full_response}")
+
+    def get_author(self, tweet_id):
+        # Placeholder for fetching author_id and username
+        try:
+            tweet = self.twitter_api_v2.get_tweet(id=tweet_id, expansions=["author_id"], tweet_fields=["author_id"])
+            author_id = tweet.data.author_id
+            user_data = self.twitter_api_v2.get_user(id=author_id, user_fields=["username"])
+            return user_data.data.username
+        except Exception as e:
+            logging.error(f"Failed to fetch author information for tweet {tweet_id}: {e}")
+            return "anonymous"
 
     def check_mentions_for_replies(self):
         logging.info("Checking for new mentions.")
@@ -227,50 +234,32 @@ def show_inventory(username, tweet_id):
     conn = sqlite3.connect("engagements.db")
     cursor = conn.cursor()
     
-    # Retrieve the last checked time to prevent frequent inventory checks
     cursor.execute("SELECT last_checked FROM inventory WHERE username = ?", (username,))
     result = cursor.fetchone()
     now = datetime.utcnow()
     
-    # Check if the last inventory check was within the last 24 hours
     if result and result[0] and now < datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S") + timedelta(hours=24):
-        # Calculate remaining cooldown time
         remaining_time = (datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S") + timedelta(hours=24)) - now
         hours, remainder = divmod(remaining_time.seconds, 3600)
         minutes = remainder // 60
         response = f"@{username}, check your inventory again in {hours} hours and {minutes} minutes."
-        inventory_message = "No items"  # Explicitly set inventory_message for logging
     else:
-        # Fetch the user's inventory items and quantities
         cursor.execute("SELECT item, quantity FROM inventory WHERE username = ?", (username,))
         inventory = cursor.fetchall()
-        
-        # Define inventory_message based on whether inventory is empty or has items
-        if not inventory:
-            response = f"@{username}, no items in your inventory yet! Engage more to collect rewards."
-            inventory_message = "No items"
-        else:
-            # Format the inventory details into a readable message
-            inventory_message = ", ".join([f"{item}: {qty}" for item, qty in inventory])
-            response = f"@{username}, here’s your current inventory: {inventory_message}"
-        
-        # Update the last checked time in the inventory database
-        cursor.execute("UPDATE inventory SET last_checked = ? WHERE username = ?", 
-                       (now.strftime("%Y-%m-%d %H:%M:%S"), username))
+        inventory_message = ", ".join([f"{item}: {qty}" for item, qty in inventory]) if inventory else "No items"
+        response = f"@{username}, here’s your current inventory: {inventory_message}"
+        cursor.execute("UPDATE inventory SET last_checked = ? WHERE username = ?", (now.strftime("%Y-%m-%d %H:%M:%S"), username))
     
-    # Commit and close the connection
     conn.commit()
     conn.close()
     
-    # Try to send the response tweet with the inventory status
     try:
         bot.twitter_api_v2.create_tweet(text=response, in_reply_to_tweet_id=tweet_id)
     except tweepy.errors.Forbidden as e:
         unique_response = response + f" {random.choice(['🔥', '💎', '🚀'])}"
         bot.twitter_api_v2.create_tweet(text=unique_response, in_reply_to_tweet_id=tweet_id)
 
-    # Log the inventory check result
-    logging.info(f"Inventory check complete for @{username}. Inventory: {inventory_message}")
+    logging.info(f"Inventory check complete for @{username}. Inventory: {inventory_message if inventory else 'No items'}")
 
 # Scheduling tasks in separate threads
 def run_mentions_check():
