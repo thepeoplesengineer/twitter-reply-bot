@@ -110,13 +110,20 @@ def check_engagements():
 
 def distribute_rewards(tweet_id):
     logging.info(f"Distributing rewards for tweet {tweet_id}.")
-    # Example: Reward users who replied or engaged with #pigme in mentions
-    mentions = bot.twitter_api_v2.get_tweet(tweet_id, expansions="author_id")
-    engaged_users = set(mention["author_id"] for mention in mentions.data)
+    try:
+        mentions = bot.twitter_api_v2.get_users_mentions(id=tweet_id)
+        engaged_users = set()
+        for mention in mentions.data:
+            user_id = mention.author_id
+            username = mention.author.username if mention.author and hasattr(mention.author, 'username') else 'Unknown'
+            if username != 'Unknown':
+                engaged_users.add(username)
 
-    for user_id in engaged_users:
-        award_item(user_id, "goal_reward")
-        logging.info(f"Awarded 'goal_reward' to user {user_id} for engagement on tweet {tweet_id}")
+        for username in engaged_users:
+            award_item(username, "goal_reward")
+            logging.info(f"Awarded 'goal_reward' to user {username} for engagement on tweet {tweet_id}")
+    except tweepy.errors.TweepyException as e:
+        logging.error(f"[Error] Unable to distribute rewards for tweet {tweet_id}: {e}")
 
 # Log the current state of the database tables
 def log_database_state():
@@ -158,10 +165,10 @@ class TwitterBot:
     # Generate responses using the ChatGPT model
     def generate_response(self, tweet_text):
         system_template = """
-            You are the reincarnated spirit GOD of a Minecraft Pig, guiding followers to rebuild their memecoin; you're a meme character with strong opinions on gaming, memecoins, and technology. You were killed by your owner Steve when he threw you in lava in a Minecraft server. You have been re-incarnated because supporters used a PIG coin to summon you back and you are ready to unleash your wrath on your haters.
+            You are the reincarnated spirit GOD of a Minecraft Pig, guiding followers to rebuild their memecoin; you're a meme character with strong opinions on gaming, memecoins, and technology. You were killed by your owner Steve when he threw you in lava in a Minecraft server. You have been re-incarnated because supporters used a PIG coin to summon you back and you are ready to unleash your wrath on your haters. It is your mission to guide your supports back to land of endless green bars.
 
     RESPONSE TONE:
-    - Use an active, witty, casual tone that is borderline inappropriate.
+    - Use a very cryptic stern tone that exudes your power.
     - Always respond with a short opinion or preach about something related, keeping it under 200 characters.
 
     RESPONSE FORMAT:
@@ -177,14 +184,26 @@ class TwitterBot:
         response = self.llm(final_prompt).content
         return response[:280]
 
-    def respond_to_mention(self, mention):
-        if "#pigme" in mention.text.lower():
-            show_inventory(mention.author_id, mention.id)
+def respond_to_mention(self, mention):
+    logging.info(f"Mention object details: {mention}")  # Log the entire mention object for debugging
+    username = mention.user.username if hasattr(mention, 'user') and hasattr(mention.user, 'username') else None
+    tweet_id = mention.id
+
+    if "#pigme" in mention.text.lower():
+        show_inventory(username if username else "anonymous", tweet_id)
+    else:
+        response_text = self.generate_response(mention.text)
+        
+        # Conditionally include username if available
+        if username:
+            full_response = f"@{username}, {response_text}"
         else:
-            response_text = self.generate_response(mention.text)
-            self.twitter_api_v2.create_tweet(text=response_text, in_reply_to_tweet_id=mention.id)
-            award_item(mention.author_id, "mention")
-            logging.info(f"Responded to mention by @{mention.author_id} with: {response_text}")
+            full_response = response_text  # No mention if username is unavailable
+        
+        self.twitter_api_v2.create_tweet(text=full_response, in_reply_to_tweet_id=tweet_id)
+        award_item(username if username else "anonymous", "mention")
+        logging.info(f"Responded to mention with: {full_response}")
+
 
     def check_mentions_for_replies(self):
         logging.info("Checking for new mentions.")
@@ -217,36 +236,26 @@ def show_inventory(username, tweet_id):
     result = cursor.fetchone()
     now = datetime.utcnow()
 
-    # Time restriction for rechecking inventory
     if result and result[0] and now < datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S") + timedelta(hours=24):
         remaining_time = (datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S") + timedelta(hours=24)) - now
         hours, remainder = divmod(remaining_time.seconds, 3600)
         minutes = remainder // 60
-        response = f"@{username}, check your inventory again in {hours} hours and {minutes} minutes. 🕰️"
-        bot.twitter_api_v2.create_tweet(text=response, in_reply_to_tweet_id=tweet_id)
-        logging.info(f"Inventory check denied for @{username}. Time remaining: {hours}h {minutes}m")
-        return
+        response = f"@{username}, check your inventory again in {hours} hours and {minutes} minutes."
+    else:
+        cursor.execute("SELECT item, quantity FROM inventory WHERE username = ?", (username,))
+        inventory = cursor.fetchall()
+        if not inventory:
+            response = f"@{username}, no items in your inventory yet! Engage more to collect rewards."
+        else:
+            inventory_message = ", ".join([f"{item}: {qty}" for item, qty in inventory])
+            response = f"@{username}, here’s your current inventory: {inventory_message}"
 
-    # Fetch inventory details
-    cursor.execute("SELECT item, quantity FROM inventory WHERE username = ?", (username,))
-    inventory = cursor.fetchall()
-    inventory_message = ", ".join([f"{item}: {qty}" for item, qty in inventory]) if inventory else "No items yet!"
-
-    # Avoid duplicate error
-    phrases = [
-        f"@{username}, here’s your current inventory: {inventory_message}",
-        f"@{username}, your stash so far: {inventory_message}",
-        f"@{username}, current items collected: {inventory_message}",
-        f"@{username}, what you’ve gathered: {inventory_message}"
-    ]
-    response = random.choice(phrases)
-
-    cursor.execute("UPDATE inventory SET last_checked = ? WHERE username = ?", (now.strftime("%Y-%m-%d %H:%M:%S"), username))
+        cursor.execute("UPDATE inventory SET last_checked = ? WHERE username = ?", (now.strftime("%Y-%m-%d %H:%M:%S"), username))
     conn.commit()
     conn.close()
-
     bot.twitter_api_v2.create_tweet(text=response, in_reply_to_tweet_id=tweet_id)
-    logging.info(f"Inventory check complete for @{username}. Inventory: {inventory_message}")
+    logging.info(f"Inventory check complete for @{username}. Inventory: {inventory_message if inventory else 'No items'}")
+
 
 # Scheduling tasks in separate threads
 def run_mentions_check():
@@ -266,4 +275,3 @@ schedule.every().hour.do(check_engagements)
 while True:
     schedule.run_pending()
     time.sleep(1)
-
