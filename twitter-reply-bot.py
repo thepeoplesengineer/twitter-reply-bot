@@ -166,42 +166,30 @@ class TwitterBot:
     - Mention the ticker $PIG every so often.
     """
         system_message_prompt = SystemMessagePromptTemplate.from_template(system_template)
-    
         human_template = "{text}"
         human_message_prompt = HumanMessagePromptTemplate.from_template(human_template)
-    
-     # Combine system and human prompts into a single ChatPromptTemplate
         chat_prompt = ChatPromptTemplate.from_messages([system_message_prompt, human_message_prompt])
-    
-    # Generate the prompt with tweet_text
         final_prompt = chat_prompt.format_prompt(text=tweet_text)
         response = self.llm(final_prompt.to_messages()).content
         return response[:280]
 
+    def respond_to_mention(self, mention):
+        logging.info(f"Complete Mention Object: {mention.__dict__}")  
+        username = getattr(mention.author, 'username', "anonymous")
+        if username == "anonymous":
+            logging.warning("Could not retrieve username; defaulting to 'anonymous'.")
 
-def respond_to_mention(self, mention):
-    # Log the mention structure for debugging
-    logging.info(f"Complete Mention Object: {mention.__dict__}")  # Log the dictionary form of mention for detailed structure
-    
-    # Attempt to retrieve username or fallback to 'anonymous'
-    username = getattr(mention.author, 'username', "anonymous")
-    if username == "anonymous":
-        logging.warning("Could not retrieve username; defaulting to 'anonymous'.")
+        tweet_id = mention.id
+        if "#pigme" in mention.text.lower():
+            show_inventory(username, tweet_id)
+        else:
+            response_text = self.generate_response(mention.text)
+            full_response = f"@{username}, {response_text}" if username != "anonymous" else response_text
+            self.twitter_api_v2.create_tweet(text=full_response, in_reply_to_tweet_id=tweet_id)
+            award_item(username)
+            logging.info(f"Responded to mention with: {full_response}")
 
-    tweet_id = mention.id
-
-    if "#pigme" in mention.text.lower():
-        show_inventory(username, tweet_id)
-    else:
-        response_text = self.generate_response(mention.text)
-        full_response = f"@{username}, {response_text}" if username != "anonymous" else response_text
-        self.twitter_api_v2.create_tweet(text=full_response, in_reply_to_tweet_id=tweet_id)
-        award_item(username)
-        logging.info(f"Responded to mention with: {full_response}")
-
-
-
-def check_mentions_for_replies(self):
+    def check_mentions_for_replies(self):
         logging.info("Checking for new mentions.")
         mentions = self.twitter_api_v2.get_users_mentions(id=self.twitter_me_id)
         replied_mentions = self.load_replied_mentions()
@@ -214,16 +202,19 @@ def check_mentions_for_replies(self):
 
         log_database_state()
 
-def load_replied_mentions(self):
+    def load_replied_mentions(self):
         if not os.path.exists(REPLIED_MENTIONS_FILE):
             return set()
         with open(REPLIED_MENTIONS_FILE, "r") as file:
             return set(line.strip() for line in file)
 
-def save_replied_mention(self, mention_id):
+    def save_replied_mention(self, mention_id):
         with open(REPLIED_MENTIONS_FILE, "a") as file:
             file.write(f"{mention_id}\n")
         logging.info(f"Saved replied mention ID: {mention_id}")
+
+
+
 
 def show_inventory(username, tweet_id):
     conn = sqlite3.connect("engagements.db")
