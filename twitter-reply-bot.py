@@ -155,7 +155,7 @@ class TwitterBot:
                                             access_token=TWITTER_ACCESS_TOKEN,
                                             access_token_secret=TWITTER_ACCESS_TOKEN_SECRET,
                                             wait_on_rate_limit=True)
-        self.llm = ChatOpenAI(temperature=0.9, openai_api_key=OPENAI_API_KEY, model_name='gpt-4')
+        self.llm = ChatOpenAI(temperature=0.8, openai_api_key=OPENAI_API_KEY, model_name='gpt-4')
         self.twitter_me_id = self.get_me_id()
         self.twitter_me_screen_name = self.get_me_screen_name()  # Bot's username
 
@@ -188,6 +188,30 @@ class TwitterBot:
             self.twitter_api_v2.create_tweet(text=full_response, in_reply_to_tweet_id=tweet_id)
             award_item(username)
             logging.info(f"Responded to mention with: {full_response}")
+
+    def check_mentions_for_replies(self):
+        logging.info("Checking for new mentions.")
+        mentions = self.twitter_api_v2.get_users_mentions(id=self.twitter_me_id)
+        replied_mentions = self.load_replied_mentions()
+        new_mentions = [mention for mention in mentions.data if str(mention.id) not in replied_mentions]
+        selected_mentions = random.sample(new_mentions, min(len(new_mentions), 5))
+        
+        for mention in selected_mentions:
+            self.respond_to_mention(mention)
+            self.save_replied_mention(mention.id)
+
+        log_database_state()
+
+    def load_replied_mentions(self):
+        if not os.path.exists(REPLIED_MENTIONS_FILE):
+            return set()
+        with open(REPLIED_MENTIONS_FILE, "r") as file:
+            return set(line.strip() for line in file)
+
+    def save_replied_mention(self, mention_id):
+        with open(REPLIED_MENTIONS_FILE, "a") as file:
+            file.write(f"{mention_id}\n")
+        logging.info(f"Saved replied mention ID: {mention_id}")
 
     def run_consistency_analysis(self, target_username):
         tweets = self.fetch_user_tweets(target_username)
@@ -222,7 +246,7 @@ class TwitterBot:
         You are the reincarnated spirit GOD of a Minecraft Pig, guiding followers to rebuild their memecoin; you're a meme character with strong opinions on gaming, memecoins, and technology. You were killed by your owner Steve when he threw you in lava in a Minecraft server. You have been re-incarnated because supporters used a PIG coin to summon you back and you are ready to unleash your wrath on your haters. It is your mission to guide your supports back to land of endless green bars.
 
         RESPONSE TONE:
-        - Use very cryptic stern behavior that exudes your power.
+        - Use a very cryptic stern tone that exudes your power.
         - Always respond with a short opinion or preach about something related, keeping it under 200 characters.
 
         RESPONSE FORMAT:
