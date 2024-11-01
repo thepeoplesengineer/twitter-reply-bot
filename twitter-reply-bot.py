@@ -155,7 +155,7 @@ class TwitterBot:
 
     def generate_response(self, tweet_text):
         system_template = """
-            You are the reincarnated spirit GOD of a Minecraft Pig, guiding followers to rebuild their memecoin; you're a meme character with strong opinions on gaming, memecoins, and technology. You were killed by your owner Steve when he threw you in lava in a Minecraft server. You have been re-incarnated because supporters used a PIG coin to summon you back and you are ready to unleash your wrath on your haters. It is your mission to guide your supports back to land of endless green bars.
+        You are the reincarnated spirit GOD of a Minecraft Pig, guiding followers to rebuild their memecoin; you're a meme character with strong opinions on gaming, memecoins, and technology. You were killed by your owner Steve when he threw you in lava in a Minecraft server. You have been re-incarnated because supporters used a PIG coin to summon you back and you are ready to unleash your wrath on your haters. It is your mission to guide your supports back to land of endless green bars.
 
     RESPONSE TONE:
     - Use a very cryptic stern tone that exudes your power.
@@ -163,16 +163,21 @@ class TwitterBot:
 
     RESPONSE FORMAT:
     - Use two sentences or fewer, no emojis. Ask questions too.
-    - Mention the ticker $PIG every so often
-        """
+    - Mention the ticker $PIG every so often.
+    """
         system_message_prompt = SystemMessagePromptTemplate.from_template(system_template)
+    
         human_template = "{text}"
         human_message_prompt = HumanMessagePromptTemplate.from_template(human_template)
+    
+     # Combine system and human prompts into a single ChatPromptTemplate
         chat_prompt = ChatPromptTemplate.from_messages([system_message_prompt, human_message_prompt])
-        
-        final_prompt = chat_prompt.format_prompt(text=tweet_text).to_messages()
-        response = self.llm(final_prompt).content
+    
+    # Generate the prompt with tweet_text
+        final_prompt = chat_prompt.format_prompt(text=tweet_text)
+        response = self.llm(final_prompt.to_messages()).content
         return response[:280]
+
 
     def respond_to_mention(self, mention):
         logging.info(f"Mention object details: {mention}")
@@ -184,7 +189,16 @@ class TwitterBot:
         else:
             response_text = self.generate_response(mention.text)
             full_response = f"@{username}, {response_text}" if username else response_text
-            self.twitter_api_v2.create_tweet(text=full_response, in_reply_to_tweet_id=tweet_id)
+            
+            try:
+                self.twitter_api_v2.create_tweet(text=full_response, in_reply_to_tweet_id=tweet_id)
+            except tweepy.errors.Forbidden as e:
+                if "duplicate content" in str(e):
+                    full_response += f" {random.choice(['🔥', '💎', '🚀'])}"  # Adding unique emoji
+                    self.twitter_api_v2.create_tweet(text=full_response, in_reply_to_tweet_id=tweet_id)
+                else:
+                    logging.error(f"Failed to send tweet due to: {e}")
+            
             award_item(username if username else "anonymous")
             logging.info(f"Responded to mention with: {full_response}")
 
@@ -215,28 +229,45 @@ class TwitterBot:
 def show_inventory(username, tweet_id):
     conn = sqlite3.connect("engagements.db")
     cursor = conn.cursor()
+    
+    # Retrieve the last checked time to prevent frequent inventory checks
     cursor.execute("SELECT last_checked FROM inventory WHERE username = ?", (username,))
     result = cursor.fetchone()
     now = datetime.utcnow()
-
+    
+    # Check if the last inventory check was within the last 24 hours
     if result and result[0] and now < datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S") + timedelta(hours=24):
+        # Calculate remaining cooldown time
         remaining_time = (datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S") + timedelta(hours=24)) - now
         hours, remainder = divmod(remaining_time.seconds, 3600)
         minutes = remainder // 60
         response = f"@{username}, check your inventory again in {hours} hours and {minutes} minutes."
     else:
+        # Fetch the user's inventory items and quantities
         cursor.execute("SELECT item, quantity FROM inventory WHERE username = ?", (username,))
         inventory = cursor.fetchall()
+        
         if not inventory:
             response = f"@{username}, no items in your inventory yet! Engage more to collect rewards."
         else:
+            # Format the inventory details into a readable message
             inventory_message = ", ".join([f"{item}: {qty}" for item, qty in inventory])
             response = f"@{username}, here’s your current inventory: {inventory_message}"
-
-        cursor.execute("UPDATE inventory SET last_checked = ? WHERE username = ?", (now.strftime("%Y-%m-%d %H:%M:%S"), username))
+        
+        # Update the last checked time in the inventory database
+        cursor.execute("UPDATE inventory SET last_checked = ? WHERE username = ?", 
+                       (now.strftime("%Y-%m-%d %H:%M:%S"), username))
+    
+    # Commit and close the connection
     conn.commit()
     conn.close()
-    bot.twitter_api_v2.create_tweet(text=response, in_reply_to_tweet_id=tweet_id)
+    
+    # Send the response tweet with the inventory status
+    try:
+        bot.twitter_api_v2.create_tweet(text=response, in_reply_to_tweet_id=tweet_id)
+    except tweepy.errors.TweepyException as e:
+        logging.error(f"[Error] Failed to reply with inventory for {username}: {e}")
+    
     logging.info(f"Inventory check complete for @{username}. Inventory: {inventory_message if inventory else 'No items'}")
 
 # Scheduling tasks in separate threads
@@ -256,4 +287,5 @@ schedule.every().hour.do(check_engagements)
 while True:
     schedule.run_pending()
     time.sleep(1)
+
 
