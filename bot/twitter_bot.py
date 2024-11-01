@@ -43,29 +43,28 @@ class TwitterBot:
             file.write(f"{mention_id}\n")
         logging.info(f"Saved replied mention ID: {mention_id}")
 
-# In bot/twitter_bot.py
-
-def respond_to_mentions(self):
-    """Fetch new mentions and respond to them."""
-    logging.info("Checking for new mentions.")
-    try:
-        mentions = self.twitter_api_v2.get_users_mentions(id=self.twitter_me_id)
-        
-        for mention in mentions.data:
-            mention_id = mention.id
+    def respond_to_mentions(self):
+        """Fetch new mentions and respond to them."""
+        logging.info("Checking for new mentions.")
+        try:
+            mentions = self.twitter_api_v2.get_users_mentions(id=self.twitter_me_id)
             
-            # Check if we have already replied to this mention
-            if mention_id not in self.replied_mentions:
-                logging.info(f"Handling mention from @{mention.author.username} (ID: {mention_id})")
+            for mention in mentions.data:
+                mention_id = mention.id
                 
-                # Handle the mention and add the mention ID to the set
-                handle_mention(mention, self.twitter_api_v2)
-                self.save_replied_mention(mention_id)
-                self.replied_mentions.add(mention_id)
-            else:
-                logging.info(f"Already responded to mention ID {mention_id}, skipping.")
-    
-    except Exception as e:
-        logging.error(f"Error while responding to mentions: {e}", exc_info=True)
+                # Check if we have already replied to this mention
+                if mention_id not in self.replied_mentions:
+                    logging.info(f"Handling mention from @{mention.author.username} (ID: {mention_id})")
+                    
+                    # Handle the mention and add the mention ID to the set
+                    handle_mention(mention, self.twitter_api_v2)
+                    self.save_replied_mention(mention_id)
+                    self.replied_mentions.add(mention_id)
+                else:
+                    logging.info(f"Already responded to mention ID {mention_id}, skipping.")
+        
+        except Exception as e:
+            logging.error(f"Error while responding to mentions: {e}", exc_info=True)
+
 
 
