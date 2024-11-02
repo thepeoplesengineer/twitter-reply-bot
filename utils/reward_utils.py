@@ -1,7 +1,8 @@
 import sqlite3
 import logging
 
-from item_award import execute_with_retry
+from utils.item_award import execute_with_retry
+
 
 def show_inventory(username, tweet_id, twitter_api_v2):
     query = "SELECT item, quantity FROM inventory WHERE username = ?"
