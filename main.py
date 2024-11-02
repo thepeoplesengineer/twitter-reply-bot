@@ -1,7 +1,8 @@
 from bot.twitter_bot import TwitterBot
 from utils.logging_config import setup_logging
 from utils.db import setup_database
-from utils.reward_utils import shuffle_reward
+from utils.rewards_service import shuffle_reward
+
 from utils.schedule_tasks import check_engagements, post_random_tweet  # Ensure this import is correct
 import schedule
 import threading

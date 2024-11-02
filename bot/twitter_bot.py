@@ -6,6 +6,7 @@ from bot.mention_handler import handle_mention
 from utils.rewards_service import current_reward
 
 
+
 REPLIED_MENTIONS_FILE = "replied_mentions.txt"
 
 class TwitterBot:
