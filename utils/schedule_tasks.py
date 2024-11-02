@@ -56,18 +56,20 @@ def log_database_state():
 
 def post_random_tweet(bot):
     """Schedule three random tweet posts within a 24-hour period."""
-    # Generate three random times within the day (in minutes from start of the day)
-    times = sorted([random.randint(0, 24 * 60) for _ in range(3)])
-
-    # Schedule the post at each random time
+    # Generate three random times within the day, represented as minutes since the start of the day
+    times = sorted([random.randint(0, 24 * 60) for _ in range(3)])  # Random times in minutes from start of the day
+    
+    # Convert minutes into specific `time` objects and schedule the posts
+    formatted_times = []
     for minutes in times:
-        # Convert minutes into a specific time object
-        random_time = (datetime.now() + timedelta(minutes=minutes)).time()
+        # Convert minutes into hours and minutes, and then create a time object
+        random_time = (datetime.now().replace(hour=0, minute=0) + timedelta(minutes=minutes)).time()
+        formatted_times.append(random_time.strftime("%H:%M"))  # Format for logging
+
+        # Schedule the post at each random time
         schedule.every().day.at(random_time.strftime("%H:%M")).do(post_tweet, bot)
 
-    # Log the scheduled times in HH:MM format
-    scheduled_times = [(datetime.now() + timedelta(minutes=minutes)).strftime("%H:%M") for minutes in times]
-    logging.info(f"Scheduled tweets for times: {scheduled_times}")
+    logging.info(f"Scheduled tweets for times: {formatted_times}")
 
 def post_tweet(bot):
     """Generate tweet content and post it using the bot."""
