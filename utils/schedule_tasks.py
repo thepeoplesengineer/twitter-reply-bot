@@ -1,5 +1,6 @@
 import logging
 import tweepy
+import schedule
 import random
 from utils.reward_utils import distribute_rewards, shuffle_reward
 from utils.item_award import award_item  # For engagement checking and scheduled reward distribution
