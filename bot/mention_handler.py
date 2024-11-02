@@ -1,4 +1,6 @@
 from dex.dex_analysis import run_consistency_analysis
+from utils.item_award import award_item  # Import in mention handler if needed
+
 
 from utils.logging_config import logging
 from utils.db import show_inventory

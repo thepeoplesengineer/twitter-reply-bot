@@ -1,6 +1,8 @@
 import logging
 import tweepy
-from utils.reward_utils import distribute_rewards, shuffle_reward, award_item
+from utils.reward_utils import distribute_rewards, shuffle_reward
+from utils.item_award import award_item  # For engagement checking and scheduled reward distribution
+
 from bot.twitter_bot import TwitterBot
 from utils.god_mode import generate_tweet_content
 

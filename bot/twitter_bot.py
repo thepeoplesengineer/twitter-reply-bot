@@ -3,6 +3,8 @@ import os
 from config.config import TWITTER_API_KEY, TWITTER_API_SECRET, TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET, TWITTER_BEARER_TOKEN
 from utils.logging_config import logging
 from bot.mention_handler import handle_mention
+from utils.item_award import award_item  # For TwitterBot or tweet handling logic
+
 
 REPLIED_MENTIONS_FILE = "replied_mentions.txt"
 

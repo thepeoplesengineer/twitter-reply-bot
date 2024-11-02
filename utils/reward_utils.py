@@ -1,6 +1,6 @@
 import random
 import logging
-from utils.reward_utils import award_item
+from utils.item_award import award_item  # Import from item_award
 from utils.db import get_all_engagements, get_all_inventory
 
 # List of resources for rotation
@@ -64,4 +64,6 @@ def distribute_rewards(tweet_id, bot):
             
     except Exception as e:
         logging.error(f"[ERROR] Unable to distribute rewards for tweet {tweet_id}: {e}")
+
+
 
