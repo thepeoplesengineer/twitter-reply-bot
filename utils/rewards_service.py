@@ -1,6 +1,7 @@
 import random
 import logging
-from item_award import award_item  # Import from item_award
+from utils.item_award import award_item
+
 
 
 # Define items and rotating reward
