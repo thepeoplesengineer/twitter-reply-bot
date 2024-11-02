@@ -3,7 +3,7 @@ import os
 from config.config import TWITTER_API_KEY, TWITTER_API_SECRET, TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET, TWITTER_BEARER_TOKEN
 from utils.logging_config import logging
 from bot.mention_handler import handle_mention
-from utils.item_award import award_item  # For TwitterBot or tweet handling logic
+from utils.item_award import award_item , current_reward # For TwitterBot or tweet handling logic
 
 
 REPLIED_MENTIONS_FILE = "replied_mentions.txt"
@@ -73,7 +73,7 @@ class TwitterBot:
                     logging.info(f"Handling mention from @{username} (ID: {mention_id})")
                     
                     # Handle the mention and add the mention ID to the set
-                    handle_mention(mention, self.twitter_api_v2, username)
+                    handle_mention(mention, self.twitter_api_v2, username, current_reward)
                     self.save_replied_mention(mention_id)
                     self.replied_mentions.add(mention_id)
                 else:

@@ -20,7 +20,7 @@ auth = tweepy.OAuth1UserHandler(
 )
 api = tweepy.API(auth)
 
-def handle_mention(mention, twitter_api_v2, username):
+def handle_mention(mention, twitter_api_v2, username, current_reward):
     """Handle a mention by responding based on hashtags or by generating a response."""
     tweet_id = mention.id
     logging.info(f"[START] Processing mention from @{username} with tweet ID {tweet_id}. Mention text: '{mention.text}'")
