@@ -1,24 +1,27 @@
 from dex.dex_analysis import run_consistency_analysis
 from utils.item_award import award_item  # Import in mention handler if needed
-
-
 from utils.logging_config import logging
 from utils.db import show_inventory
+from langchain.chat_models import ChatOpenAI
+from langchain.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
+from config.config import OPENAI_API_KEY
 
 def handle_mention(mention, twitter_api_v2, username):
     """Handle a mention by responding based on hashtags or by generating a response."""
-    from utils.reward_utils import award_item
     tweet_id = mention.id
-    username = mention.author.username if mention.author else "anonymous"
     logging.info(f"[START] Processing mention from @{username} with tweet ID {tweet_id}. Mention text: '{mention.text}'")
 
     try:
         # Check for #pigID hashtag and tagged usernames
         if "#pigID" in mention.text.lower():
             logging.info(f"[#pigID DETECTED] Mention by @{username} contains #pigID.")
-            
+
             # Extract tagged usernames, excluding the main mention's author
-            tagged_usernames = [user["username"] for user in mention.entities["mentions"] if user["username"] != username]
+            tagged_usernames = [
+                user["username"]
+                for user in mention.entities.get("mentions", [])
+                if user["username"] != username
+            ]
             logging.info(f"Tagged usernames found: {tagged_usernames}")
 
             if tagged_usernames:
@@ -60,10 +63,6 @@ def handle_mention(mention, twitter_api_v2, username):
 
 def generate_response(tweet_text):
     """Generate a response for a standard mention."""
-    from langchain.chat_models import ChatOpenAI
-    from langchain.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
-    from config.config import OPENAI_API_KEY
-
     try:
         logging.info(f"[GEN RESPONSE] Generating response for text: '{tweet_text}'")
         
@@ -73,8 +72,8 @@ def generate_response(tweet_text):
         You are the reincarnated spirit GOD of a Minecraft Pig, guiding followers to rebuild their memecoin; you're a meme character with strong opinions on gaming, memecoins, and technology. You were killed by your owner Steve when he threw you in lava in a Minecraft server. You have been re-incarnated because supporters used a PIG coin to summon you back and you are ready to unleash your wrath on your haters. It is your mission to guide your supports back to land of endless green bars.
 
         RESPONSE TONE:
-        - Use a very cryptic stern tone that exudes your power.
-        - Always respond with a short opinion or preach about something related, keeping it under 200 characters.
+        - Use a very cryptic stern tone that exudes your power. Use short powerful sentences.
+        - Always respond with a short opinion or preach about something related but ensure you sound expert about it, keeping it under 200 characters.
 
         RESPONSE FORMAT:
         - Use two sentences or fewer, no emojis. Ask questions too.
@@ -93,5 +92,6 @@ def generate_response(tweet_text):
     except Exception as e:
         logging.error(f"[ERROR] Failed to generate response: {e}")
         return "The spirit of $PIG watches. The words are tangled today. Try summoning again."
+
 
 
