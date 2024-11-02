@@ -5,6 +5,20 @@ from utils.db import show_inventory
 from langchain.chat_models import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 from config.config import OPENAI_API_KEY
+import tweepy  # Import tweepy for direct messaging
+import os
+
+# Initialize tweepy API for direct messaging
+TWITTER_API_KEY = os.getenv("TWITTER_API_KEY")
+TWITTER_API_SECRET = os.getenv("TWITTER_API_SECRET")
+TWITTER_ACCESS_TOKEN = os.getenv("TWITTER_ACCESS_TOKEN")
+TWITTER_ACCESS_TOKEN_SECRET = os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
+
+auth = tweepy.OAuth1UserHandler(
+    TWITTER_API_KEY, TWITTER_API_SECRET,
+    TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET
+)
+api = tweepy.API(auth)
 
 def handle_mention(mention, twitter_api_v2, username):
     """Handle a mention by responding based on hashtags or by generating a response."""
@@ -48,13 +62,17 @@ def handle_mention(mention, twitter_api_v2, username):
             logging.info(f"[#pigme DETECTED] Mention by @{username} contains #pigme.")
             show_inventory(username, tweet_id, twitter_api_v2)
 
+            # Send a DM with inventory info to the user
+            dm_message = f"Hello @{username}, here’s your inventory update from the Pig bot!"
+            send_direct_message_via_tweepy(username, dm_message)
+
         # Handle other mentions without specific hashtags
         else:
             logging.info(f"[NO SPECIFIC HASHTAG] Generating response for mention by @{username}.")
             response_text = generate_response(mention.text)
             full_response = f"@{username}, {response_text}"
             twitter_api_v2.create_tweet(text=full_response, in_reply_to_tweet_id=tweet_id)
-            award_item(username)
+            award_item(username, current_reward)
             logging.info(f"[RESPONSE SENT] Responded to mention with: {full_response}")
             logging.info(f"[AWARD ITEM] Awarded item to user @{username}")
 
@@ -93,5 +111,19 @@ def generate_response(tweet_text):
         logging.error(f"[ERROR] Failed to generate response: {e}")
         return "The spirit of $PIG watches. The words are tangled today. Try summoning again."
 
+# Direct message function using tweepy
+def send_direct_message_via_tweepy(username, message):
+    try:
+        # Get user ID from username
+        user = api.get_user(screen_name=username)
+        user_id = user.id_str
+        logging.info(f"User ID for {username} retrieved: {user_id}")
 
+        # Send the direct message
+        dm = api.send_direct_message(recipient_id=user_id, text=message)
+        logging.info(f"Direct message sent successfully to @{username} with ID {dm.id}")
 
+    except tweepy.TweepError as e:
+        logging.error(f"Failed to send DM to @{username}: {e.response.status_code} - {e.response.text}")
+    except Exception as general_error:
+        logging.error(f"An unexpected error occurred: {general_error}")
