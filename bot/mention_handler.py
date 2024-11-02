@@ -5,7 +5,7 @@ from utils.item_award import award_item  # Import in mention handler if needed
 from utils.logging_config import logging
 from utils.db import show_inventory
 
-def handle_mention(mention, twitter_api_v2):
+def handle_mention(mention, twitter_api_v2, username):
     """Handle a mention by responding based on hashtags or by generating a response."""
     from utils.reward_utils import award_item
     tweet_id = mention.id
