@@ -1,10 +1,11 @@
 from dex.dex_analysis import run_consistency_analysis
-from utils.reward_utils import award_item
+
 from utils.logging_config import logging
 from utils.db import show_inventory
 
 def handle_mention(mention, twitter_api_v2):
     """Handle a mention by responding based on hashtags or by generating a response."""
+    from utils.reward_utils import award_item
     tweet_id = mention.id
     username = mention.author.username if mention.author else "anonymous"
     logging.info(f"[START] Processing mention from @{username} with tweet ID {tweet_id}. Mention text: '{mention.text}'")
