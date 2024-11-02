@@ -1,69 +1,31 @@
-import random
+import sqlite3
 import logging
-from utils.item_award import award_item  # Import from item_award
-from utils.db import get_all_engagements, get_all_inventory
 
-# List of resources for rotation
-item_options = ["Wood", "Bacon", "Stone", "Iron", "Water"]
-current_reward = random.choice(item_options)  # Start with a random reward
-ENGAGEMENT_TOTAL_TARGET = 3  # Engagement threshold for reward distribution
-goal_achieved_tweets = set()  # Track tweets that already met the goal
+from item_award import execute_with_retry
 
-def shuffle_reward():
-    global current_reward
-    current_reward = random.choice(item_options)
-    logging.info(f"[REWARD ROTATION] Next reward shuffled to: {current_reward}")
-
-def check_engagements(bot):
-    logging.info("[ENGAGEMENT CHECK] Checking engagements on bot's recent tweets.")
-    bot_tweets = bot.twitter_api_v2.get_users_tweets(id=bot.twitter_me_id, max_results=5)
-
-    for tweet in bot_tweets.data:
-        tweet_id = tweet.id
-        if tweet_id in goal_achieved_tweets:
-            continue  # Skip tweets that already reached engagement goals
-
-        try:
-            # Fetch engagement metrics for the tweet
-            tweet_metrics = bot.twitter_api_v2.get_tweet(tweet_id, tweet_fields="public_metrics").data["public_metrics"]
-            total_engagements = tweet_metrics["like_count"] + tweet_metrics["retweet_count"] + tweet_metrics["reply_count"]
-            logging.info(f"[ENGAGEMENT COUNT] Tweet {tweet_id} total engagements: {total_engagements}")
-
-            # Check if total engagements meet or exceed the threshold
-            if total_engagements >= ENGAGEMENT_TOTAL_TARGET:
-                goal_achieved_tweets.add(tweet_id)  # Mark tweet as rewarded
-                logging.info(f"[ENGAGEMENT TARGET MET] Tweet {tweet_id} reached engagement target. Distributing rewards.")
-                
-                # Distribute rewards to users who engaged with the tweet
-                distribute_rewards(tweet_id, bot)
-                
-                # Shuffle to the next resource
-                shuffle_reward()
-
-        except Exception as e:
-            logging.error(f"[ERROR] Failed to fetch engagements for tweet {tweet_id}: {e}")
-
-def distribute_rewards(tweet_id, bot):
-    """
-    Award the current resource to each user who engaged with the specified tweet.
-    """
+def show_inventory(username, tweet_id, twitter_api_v2):
+    query = "SELECT item, quantity FROM inventory WHERE username = ?"
+    inventory = None
+    conn = sqlite3.connect("engagements.db")
+    cursor = conn.cursor()
     try:
-        # Retrieve the list of users who engaged with the tweet
-        tweet_engagements = bot.twitter_api_v2.get_tweet(tweet_id, expansions="author_id", tweet_fields="public_metrics")
+        # Set WAL mode for concurrent read/write
+        cursor.execute("PRAGMA journal_mode=WAL;")
+        cursor.execute("PRAGMA synchronous=NORMAL;")
 
-        # Collect usernames of users who engaged with the tweet
-        engaged_users = set()
-        for engagement in tweet_engagements.includes["users"]:
-            username = engagement.username
-            engaged_users.add(username)
+        # Fetch inventory
+        cursor.execute(query, (username,))
+        inventory = cursor.fetchall()
+        inventory_message = ", ".join([f"{item}: {qty}" for item, qty in inventory]) if inventory else "No items"
+        response = f"@{username}, here’s your current inventory: {inventory_message}"
+        
+        # Send response
+        twitter_api_v2.create_tweet(text=response, in_reply_to_tweet_id=tweet_id)
+    except sqlite3.OperationalError as e:
+        logging.error(f"[DB ERROR] Inventory check failed for @{username}: {e}")
+    finally:
+        conn.close()
 
-        # Award the current reward to each user who engaged
-        for username in engaged_users:
-            award_item(username, current_reward)  # Pass current_reward
-            logging.info(f"[AWARD ITEM] Awarded '{current_reward}' to user @{username} for engagement on tweet {tweet_id}")
-            
-    except Exception as e:
-        logging.error(f"[ERROR] Unable to distribute rewards for tweet {tweet_id}: {e}")
 
 
 
