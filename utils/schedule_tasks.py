@@ -56,38 +56,22 @@ def log_database_state():
 
 def post_random_tweet(bot):
     """Schedule three random tweet posts within a 24-hour period."""
-    # Generate three random times within the day
-    times = sorted([random.randint(0, 24 * 60) for _ in range(3)])  # Random times in minutes from start of the day
-    
+    # Generate three random times within the day (in minutes from start of the day)
+    times = sorted([random.randint(0, 24 * 60) for _ in range(3)])
+
+    # Schedule the post at each random time
     for minutes in times:
-        # Convert minutes into a specific time
+        # Convert minutes into a specific time object
         random_time = (datetime.now() + timedelta(minutes=minutes)).time()
-        
-        # Schedule the post at each random time
         schedule.every().day.at(random_time.strftime("%H:%M")).do(post_tweet, bot)
 
-    logging.info(f"Scheduled tweets for times: {[t.strftime('%H:%M') for t in times]}")
-
-from datetime import datetime, timedelta
+    # Log the scheduled times in HH:MM format
+    scheduled_times = [(datetime.now() + timedelta(minutes=minutes)).strftime("%H:%M") for minutes in times]
+    logging.info(f"Scheduled tweets for times: {scheduled_times}")
 
 def post_tweet(bot):
-    """Generate tweet content, include mentions for a 'prayer' tweet, and post it using the bot."""
-    # Fetch the most recent 5 mentions within the last 24 hours
-    yesterday = datetime.utcnow() - timedelta(hours=24)
-    mentions = bot.twitter_api_v2.get_users_mentions(id=bot.twitter_me_id, start_time=yesterday.isoformat(), max_results=5)
-    
-    mentioned_users = [mention.author.username for mention in mentions.data[:5] if mention.author]
-
-    # Generate tweet content based on whether it's a "prayer" or a regular tweet
-    if mentioned_users:
-        content = f"Today's prayer for $PIG supporters: {', '.join('@' + user for user in mentioned_users)}. May you be strengthened with {bot.current_reward}."
-    else:
-        content = generate_tweet_content()
-    
+    """Generate tweet content and post it using the bot."""
+    content = generate_tweet_content()
     bot.twitter_api_v2.create_tweet(text=content)
     logging.info(f"Posted tweet: {content}")
-    
-    # Award each mentioned user the current resource
-    for username in mentioned_users:
-        award_item(username)
 
