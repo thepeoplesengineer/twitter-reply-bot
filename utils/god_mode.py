@@ -6,6 +6,8 @@ import json
 from datetime import datetime, timedelta
 from config.config import OPENAI_API_KEY
 from bot.twitter_bot import TwitterBot
+from utils.rewards_service import current_reward
+
 
 
 # Sample lore data, which can also be stored in an external JSON file
