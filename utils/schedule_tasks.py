@@ -74,7 +74,7 @@ def post_random_tweet(bot):
 
 def post_tweet(bot):
     """Generate tweet content and post it using the bot."""
-    content = generate_tweet_content()
+    content = generate_tweet_content(bot)
     bot.twitter_api_v2.create_tweet(text=content)
     logging.info(f"Posted tweet: {content}")
 
