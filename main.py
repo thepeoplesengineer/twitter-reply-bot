@@ -3,7 +3,7 @@ from utils.logging_config import setup_logging
 from utils.db import setup_database
 from utils.rewards_service import shuffle_reward
 
-from utils.schedule_tasks import check_engagements, post_random_tweet  # Ensure this import is correct
+from utils.schedule_tasks import check_engagements, post_random_tweet, post_tweet  # Ensure this import is correct
 import schedule
 import threading
 import time
@@ -19,6 +19,7 @@ if __name__ == "__main__":
     bot = TwitterBot()
     shuffle_reward()  # Set initial reward rotation
     post_random_tweet(bot)
+    post_tweet(bot)
 
     # Start mention check and engagement check in separate threads
     threading.Thread(target=run_mentions_check, daemon=True).start()
