@@ -6,9 +6,6 @@ from bot.mention_handler import handle_mention
 from utils.rewards_service import current_reward
 from datetime import datetime
 
-
-
-
 REPLIED_MENTIONS_FILE = "replied_mentions.txt"
 
 class TwitterBot:
@@ -66,6 +63,11 @@ class TwitterBot:
             
             for mention in mentions.data:
                 mention_id = mention.id
+
+                # Skip if the mention is from the bot itself
+                if mention.author_id == self.twitter_me_id:
+                    logging.info(f"Skipping self-mention with ID {mention_id}.")
+                    continue
                 
                 # Check if we have already replied to this mention
                 if mention_id not in self.replied_mentions:
@@ -101,5 +103,6 @@ class TwitterBot:
         except Exception as e:
             logging.error(f"Error fetching recent mentions: {e}")
             return []
+
 
 
