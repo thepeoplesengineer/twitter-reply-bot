@@ -1,6 +1,8 @@
 from dex.dex_analysis import run_consistency_analysis
 from utils.item_award import award_item  # Import in mention handler if needed
 from utils.logging_config import logging
+import requests
+import json
 from utils.db import show_inventory
 from langchain.chat_models import ChatOpenAI
 
@@ -9,11 +11,18 @@ from config.config import OPENAI_API_KEY
 import tweepy  # Import tweepy for direct messaging
 import os
 
+
+
+
+
+
+
 # Initialize tweepy API for direct messaging
 TWITTER_API_KEY = os.getenv("TWITTER_API_KEY")
 TWITTER_API_SECRET = os.getenv("TWITTER_API_SECRET")
 TWITTER_ACCESS_TOKEN = os.getenv("TWITTER_ACCESS_TOKEN")
 TWITTER_ACCESS_TOKEN_SECRET = os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
+TWITTER_BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN")
 
 auth = tweepy.OAuth1UserHandler(
     TWITTER_API_KEY, TWITTER_API_SECRET,
@@ -135,19 +144,46 @@ def generate_response(tweet_text):
         logging.error(f"[ERROR] Failed to generate response: {e}")
         return "The spirit of $PIG watches. The words are tangled today. Try summoning again."
 
-# Direct message function using tweepy
+
 def send_direct_message_via_tweepy(username, message):
     try:
-        # Get user ID from username
+        # Retrieve user ID from username
         user = api.get_user(screen_name=username)
         user_id = user.id_str
         logging.info(f"User ID for {username} retrieved: {user_id}")
 
-        # Send the direct message
-        dm = api.send_direct_message(recipient_id=user_id, text=message)
-        logging.info(f"Direct message sent successfully to @{username} with ID {dm.id}")
+        # Define the correct API endpoint for sending DMs
+        endpoint = "https://api.twitter.com/2/dm/events/new"
+        
+        # Prepare headers with the Bearer token
+        headers = {
+            "Authorization": f"Bearer {TWITTER_BEARER_TOKEN}",
+            "Content-Type": "application/json"
+        }
+        
+        # Construct the payload according to Twitter's format for DMs
+        payload = {
+            "event": {
+                "type": "message_create",
+                "message_create": {
+                    "target": {"recipient_id": user_id},
+                    "message_data": {
+                        "text": message
+                    }
+                }
+            }
+        }
+        
+        # Send the POST request to Twitter API
+        response = requests.post(endpoint, headers=headers, data=json.dumps(payload))
 
-    except tweepy.TweepError as e:
-        logging.error(f"Failed to send DM to @{username}: {e.response.status_code} - {e.response.text}")
+        # Check if the response indicates success
+        if response.status_code == 200 or response.status_code == 201:
+            logging.info(f"Direct message sent successfully to @{username}.")
+        else:
+            logging.error(f"Failed to send DM to @{username}: Status {response.status_code} - {response.text}")
+
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Request to send DM failed: {e}")
     except Exception as general_error:
-        logging.error(f"An unexpected error occurred: {general_error}")
+        logging.error(f"An unexpected error occurred while sending DM to @{username}: {general_error}")

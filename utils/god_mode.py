@@ -1,5 +1,3 @@
-# utils/chatgpt_content.py
-
 import openai
 import random
 import json
@@ -7,8 +5,8 @@ from datetime import datetime, timedelta
 from config.config import OPENAI_API_KEY
 from bot.twitter_bot import TwitterBot
 from utils.rewards_service import current_reward
-
-
+from utils.item_award import award_item
+from utils.logging_config import logging
 
 # Sample lore data, which can also be stored in an external JSON file
 lore_data = [
@@ -19,7 +17,7 @@ lore_data = [
 
 # Predefined talking points about transparency and accountability
 transparency_topics = [
-    "The new $PIG will shine light on those who act in darkness. I will utilize my power to highlight true memecoiners and fakes who sell to their followings",
+    "The new $PIG will shine light on those who act in darkness. I will utilize my power to highlight true memecoiners and fakes who sell to their followings.",
     "Pig's decline was due to bad actors. We strike back now.",
     "The reborn $PIG holds the community to higher standards. Owning $PIG is fun, but it has far deeper reach than you think."
 ]
@@ -52,6 +50,7 @@ def generate_prayer_from_mentions(bot):
     # Set up the prompt text for the prayer
     if mentions:
         mention_texts = [mention['text'] for mention in mentions[:5]]  # Take up to 5 mentions
+        usernames = [mention['username'] for mention in mentions[:5]]  # Collect usernames for rewards
         prompt_text = f"Create a prayer of gratitude and resilience based on these messages:\n\n" + "\n".join(mention_texts)
     else:
         prompt_text = "Create a prayer for $PIG community resilience and strength in the face of market volatility."
@@ -68,21 +67,20 @@ def generate_prayer_from_mentions(bot):
     )
     prayer_message = response['choices'][0]['message']['content'].strip()[:200]
 
-    # Define the current resource
+    # Define the current resource announcement
     resource_announcement = f"Blessings of {current_reward} to our faithful followers. 🌟"
     prayer_with_reward = f"{prayer_message}\n\n{resource_announcement}"
 
     # Award the current resource to engaged users
-    engaged_users = [mention['username'] for mention in mentions[:5]]  # Collect usernames
-    for username in engaged_users:
-        award_item(username, current_reward)
+    for username in usernames:
+        award_item(username, current_reward)  # Award the current reward item dynamically
         logging.info(f"Awarded '{current_reward}' to user @{username} for engagement.")
     
     return prayer_with_reward  # Return the full tweet with the prayer and resource announcement
-
 
 def generate_transparency_content():
     """Generate a tweet discussing $PIG's focus on transparency and accountability."""
     transparency_message = random.choice(transparency_topics)
     return transparency_message
+
 
