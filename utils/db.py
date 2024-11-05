@@ -68,13 +68,16 @@ def get_user_ids(usernames):
 # Function to fetch tweets from user timeline
 def fetch_and_store_all_tweets(user_id, username, max_count=8):
     """Fetch recent tweets from a user and store them in the database."""
-    response = client.get_users_tweets(id=user_id, max_results=max_count)
-    if not response.data:
-        logging.info(f"No tweets found for user {username}.")
-        return
+    try:
+        response = client.get_users_tweets(id=user_id, max_results=max_count)
+        if not response.data:
+            logging.info(f"No tweets found for user {username}.")
+            return
 
-    # Call to store the tweets
-    store_tweets_in_db(response.data, username)
+        # Store the tweets
+        store_tweets_in_db(response.data, username)
+    except tweepy.TweepyException as e:
+        logging.error(f"Error fetching tweets for {username}: {e}")
 
 # Store tweets in database
 def store_tweets_in_db(tweets, username):
@@ -123,8 +126,11 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
     # Run the tweet update function immediately
-    schedule_tweet_updates()
+    logging.info("Running tweet collection immediately on startup...")
+    schedule_tweet_updates()  # Initial run on deployment
 
     while True:
         schedule.run_pending()
         time.sleep(1)
+
+
