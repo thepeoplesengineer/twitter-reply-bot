@@ -73,11 +73,17 @@ def fetch_and_store_all_tweets(user_id, username, max_count=8):
         logging.info(f"No tweets found for user {username}.")
         return
 
+    # Call to store the tweets
+    store_tweets_in_db(response.data, username)
+
+# Store tweets in database
+def store_tweets_in_db(tweets, username):
+    """Store fetched tweets in the database and return the count of new tweets added."""
     conn = sqlite3.connect("pig_bot.db")
     cursor = conn.cursor()
     new_tweets = []
 
-    for tweet in response.data:
+    for tweet in tweets:
         tweet_id = tweet.id
         tweet_text = tweet.text
         created_at = tweet.created_at if tweet.created_at else datetime.utcnow()
@@ -96,6 +102,7 @@ def fetch_and_store_all_tweets(user_id, username, max_count=8):
     conn.commit()
     conn.close()
     logging.info(f"Added {len(new_tweets)} new tweets for {username} to the database.")
+    return new_tweets
 
 # Schedule to fetch tweets from specified accounts every 8 hours
 def schedule_tweet_updates():
