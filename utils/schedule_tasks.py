@@ -2,13 +2,12 @@ import logging
 import tweepy
 import schedule
 import random
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta
 from utils.rewards_service import distribute_rewards, shuffle_reward
 from utils.item_award import award_item  # For engagement checking and scheduled reward distribution
-
 from bot.twitter_bot import TwitterBot
 from utils.god_mode import generate_tweet_content
-from utils.db import fetch_and_store_recent_tweets
+from utils.db import fetch_and_store_all_tweets
 
 # Define engagement targets and tracking set
 ENGAGEMENT_TOTAL_TARGET = 5
@@ -78,4 +77,21 @@ def post_tweet(bot):
     content = generate_tweet_content(bot)
     bot.twitter_api_v2.create_tweet(text=content)
     logging.info(f"Posted tweet: {content}")
+
+def update_tweet_database():
+    """Scheduled task to fetch recent tweets and store them in the database."""
+    usernames = ["blknoiz06", "MustStopMurad", "notthreadguy"]
+    for username in usernames:
+        fetch_and_store_all_tweets(username, max_count=8)
+
+# Schedule the task to run every 8 hours
+schedule.every(8).hours.do(update_tweet_database)
+
+# Main loop for running scheduled tasks
+if __name__ == "__main__":
+    # Run the scheduled tasks
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
+
 
