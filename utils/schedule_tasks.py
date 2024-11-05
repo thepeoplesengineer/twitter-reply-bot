@@ -8,6 +8,7 @@ from utils.item_award import award_item  # For engagement checking and scheduled
 
 from bot.twitter_bot import TwitterBot
 from utils.god_mode import generate_tweet_content
+from utils.db import fetch_and_store_recent_tweets
 
 # Define engagement targets and tracking set
 ENGAGEMENT_TOTAL_TARGET = 5
