@@ -44,6 +44,16 @@ def check_engagements(bot):
         except Exception as e:
             logging.error(f"[ERROR] Failed to fetch engagements for tweet {tweet_id}: {e}")
 
+# rewards_service.py
+
+def distribute_rewards_for_goals():
+    """Distribute rewards for tweets that met the engagement goal."""
+    for tweet_id in list(goal_achieved_tweets):
+        distribute_rewards(tweet_id)  # Distribute reward for each flagged tweet
+        shuffle_reward()  # Rotate the reward after each distribution
+        goal_achieved_tweets.remove(tweet_id)  # Remove or archive once processed
+
+
 def distribute_rewards(tweet_id, bot):
     """
     Award the current resource to each user who engaged with the specified tweet.

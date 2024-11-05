@@ -1,7 +1,7 @@
 from bot.twitter_bot import TwitterBot
 from utils.logging_config import setup_logging
 from utils.db import initialize_tweet_data  # New function to handle tweet DB setup and scheduling
-from utils.rewards_service import shuffle_reward
+from utils.rewards_service import shuffle_reward, distribute_rewards_for_goals  # Import new reward distribution function
 from utils.schedule_tasks import check_engagements, post_random_tweet
 
 import schedule
@@ -30,8 +30,9 @@ if __name__ == "__main__":
     # Start mention checking in a separate thread
     threading.Thread(target=run_mentions_check, args=(bot,), daemon=True).start()
 
-    # Schedule engagement checks every hour
-    schedule.every().hour.do(check_engagements)
+    # Schedule engagement checks and reward distribution
+    schedule.every().hour.do(check_engagements)  # Only checks engagements and flags tweets
+    schedule.every().hour.do(distribute_rewards_for_goals)  # Handles reward distribution for flagged tweets
 
     # Main loop to run all scheduled tasks
     while True:
