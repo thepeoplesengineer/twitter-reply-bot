@@ -50,30 +50,14 @@ def setup_tweet_db():
     conn.commit()
     conn.close()
 
-def get_user_ids(usernames):
-    """Retrieve user IDs for specified usernames."""
-    user_ids = {}
-    for username in usernames:
-        try:
-            user = client.get_user(username=username)
-            user_ids[username] = user.data.id
-            logging.info(f"Username: {username}, User ID: {user.data.id}")
-        except tweepy.TweepyException as e:
-            logging.error(f"Error fetching user ID for {username}: {e}")
-    return user_ids
-
-def fetch_and_store_tweets(user_id, username, max_count=8):
-    """Fetch recent tweets from a user and store them in the database."""
-    response = client.get_users_tweets(id=user_id, max_results=max_count)
-    if not response.data:
-        logging.info(f"No tweets found for user {username}.")
-        return
-
+# Function to store tweets in the database
+def store_tweets_in_db(tweets, username):
+    """Store fetched tweets in the database."""
     conn = sqlite3.connect("pig_bot.db")
     cursor = conn.cursor()
     new_tweets = []
 
-    for tweet in response.data:
+    for tweet in tweets:
         tweet_id = tweet.id
         tweet_text = tweet.text
         created_at = tweet.created_at or datetime.utcnow()
@@ -90,7 +74,32 @@ def fetch_and_store_tweets(user_id, username, max_count=8):
 
     conn.commit()
     conn.close()
+    return new_tweets
 
+# Retrieve user IDs for specified usernames
+def get_user_ids(usernames):
+    """Retrieve user IDs for specified usernames."""
+    user_ids = {}
+    for username in usernames:
+        try:
+            user = client.get_user(username=username)
+            user_ids[username] = user.data.id
+            logging.info(f"Username: {username}, User ID: {user.data.id}")
+        except tweepy.TweepyException as e:
+            logging.error(f"Error fetching user ID for {username}: {e}")
+    return user_ids
+
+# Fetch and store tweets using the reusable store_tweets_in_db function
+def fetch_and_store_tweets(user_id, username, max_count=8):
+    """Fetch recent tweets from a user and store them in the database."""
+    response = client.get_users_tweets(id=user_id, max_results=max_count)
+    if not response.data:
+        logging.info(f"No tweets found for user {username}.")
+        return
+
+    store_tweets_in_db(response.data, username)  # Use the reusable function
+
+# Schedule to fetch tweets from specified accounts every 8 hours
 def schedule_tweet_updates():
     """Fetch and store tweets every 8 hours for a set list of users."""
     usernames = ["blknoiz06", "MustStopMurad", "notthreadguy"]
@@ -103,10 +112,6 @@ def initialize_tweet_data():
     """Set up databases and schedule tweet updates."""
     setup_engagement_inventory_db()
     setup_tweet_db()
-    schedule_tweet_updates()
-    schedule.every(8).hours.do(schedule_tweet_updates)
-
-
-
-
+    schedule_tweet_updates()  # Run initial update
+    schedule.every(8).hours.do(schedule_tweet_updates)  # Schedule updates every 8 hours
 
