@@ -1,5 +1,3 @@
-# utils/db.py
-
 import requests
 import os
 import sqlite3
@@ -7,6 +5,48 @@ import logging
 from datetime import datetime
 import schedule
 import time
+
+# Database setup function for engagements and inventory
+def setup_database():
+    """Set up the engagements and inventory tables if they do not exist."""
+    conn = sqlite3.connect("engagements.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS engagements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            engagement_type TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS inventory (
+            username TEXT NOT NULL,
+            item TEXT NOT NULL,
+            quantity INTEGER DEFAULT 0,
+            last_checked TIMESTAMP,
+            UNIQUE(username, item)
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+# Tweet database setup for AI persona building
+def setup_tweet_database():
+    """Create a table to store tweets for AI persona building."""
+    conn = sqlite3.connect("pig_bot.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS tweets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tweet_id TEXT UNIQUE,
+            username TEXT,
+            tweet_text TEXT,
+            created_at TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
 
 # Set your bearer token
 BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN")
@@ -24,7 +64,7 @@ def get_user_id(username):
         logging.error(f"Failed to fetch user ID for {username}. Status: {response.status_code}")
         return None
 
-# Function to fetch tweets using the user timeline endpoint
+# Function to fetch tweets from user timeline
 def fetch_and_store_all_tweets(username, max_count=8):
     user_id = get_user_id(username)
     if not user_id:
@@ -49,7 +89,6 @@ def fetch_and_store_all_tweets(username, max_count=8):
         tweet_count += len(new_tweets)  # Increment by the number of new tweets added
         logging.info(f"Added {len(new_tweets)} new tweets to the database.")
 
-        # Check for pagination and continue if there are more tweets
         if "meta" in data and "next_token" in data["meta"]:
             next_token = data["meta"]["next_token"]
             url = f"https://api.twitter.com/2/users/{user_id}/tweets?max_results=10&pagination_token={next_token}"
