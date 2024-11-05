@@ -4,7 +4,6 @@ import sqlite3
 import logging
 from datetime import datetime
 import schedule
-import time
 
 # Set up Tweepy client
 BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN")
@@ -115,22 +114,17 @@ def schedule_tweet_updates():
     for username, user_id in user_ids.items():
         fetch_and_store_all_tweets(user_id, username, max_count=8)
 
-# Set up the recurring schedule
-schedule.every(8).hours.do(schedule_tweet_updates)
-
-# Main loop for scheduled tasks
-if __name__ == "__main__":
+# Main function to be called from main.py
+def initialize_tweet_data():
+    """Setup databases, logging, and run the initial tweet collection."""
     setup_database()
     setup_tweet_database()
-
-    logging.basicConfig(level=logging.INFO)
-
-    # Run the tweet update function immediately
     logging.info("Running tweet collection immediately on startup...")
     schedule_tweet_updates()  # Initial run on deployment
 
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
+    # Set up recurring schedule for the tweet collection
+    schedule.every(8).hours.do(schedule_tweet_updates)
+
+
 
 
