@@ -7,6 +7,7 @@ from bot.twitter_bot import TwitterBot
 from utils.rewards_service import current_reward
 from utils.item_award import award_item
 from utils.logging_config import logging
+from utils.db import store_tweets_in_db
 
 # Sample lore data, which can also be stored in an external JSON file
 lore_data = [
@@ -42,41 +43,38 @@ def generate_lore_content():
     return lore_message
 
 def generate_prayer_from_mentions(bot):
-    """Generate a prayer-like tweet that also announces resource rewards for users who engaged."""
-    end_time = datetime.utcnow()
-    start_time = end_time - timedelta(hours=24)
-    mentions = bot.get_recent_mentions(start_time, end_time)  # Fetch recent mentions within 24 hours
-    
-    # Set up the prompt text for the prayer
-    if mentions:
-        mention_texts = [mention['text'] for mention in mentions[:5]]  # Take up to 5 mentions
-        usernames = [mention['username'] for mention in mentions[:5]]  # Collect usernames for rewards
-        prompt_text = f"Create a prayer of gratitude and resilience based on these messages:\n\n" + "\n".join(mention_texts)
-    else:
-        prompt_text = "Create a prayer for $PIG community resilience and strength in the face of market volatility."
+    """Generate a prayer tweet that also announces rewards for recent mentions."""
+    usernames = []  # Initialize usernames to avoid UnboundLocalError
+    try:
+        end_time = datetime.utcnow()
+        start_time = end_time - timedelta(hours=24)
+        mentions = bot.get_recent_mentions(start_time, end_time)
+        
+        # Collect usernames from recent mentions
+        for mention in mentions[:5]:  # Limit to 5 for uniqueness
+            username = mention.get("username")
+            if username:
+                usernames.append(username)
+        
+        if not usernames:
+            logging.info("No recent mentions found for prayer generation.")
+            return "The spirit of $PIG is silent today. No prayers to grant."
 
-    # Generate the prayer from ChatGPT
-    response = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": "You are a wise, mysterious guide for the $PIG community."},
-            {"role": "user", "content": prompt_text}
-        ],
-        max_tokens=50,
-        temperature=1.0
-    )
-    prayer_message = response['choices'][0]['message']['content'].strip()[:200]
+        # Generate a unique prayer
+        prayer_text = " ".join([f"Blessings to @{u}" for u in usernames])
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")  # Add timestamp for uniqueness
+        prayer_message = f"{prayer_text} - {timestamp}"
 
-    # Define the current resource announcement
-    resource_announcement = f"Blessings of {current_reward} to our faithful followers. 🌟"
-    prayer_with_reward = f"{prayer_message}\n\n{resource_announcement}"
+        # Log reward for each username
+        for username in usernames:
+            award_item(username, current_reward)
+            logging.info(f"Awarded '{current_reward}' to user @{username} for engagement.")
 
-    # Award the current resource to engaged users
-    for username in usernames:
-        award_item(username, current_reward)  # Award the current reward item dynamically
-        logging.info(f"Awarded '{current_reward}' to user @{username} for engagement.")
-    
-    return prayer_with_reward  # Return the full tweet with the prayer and resource announcement
+        return prayer_message
+
+    except Exception as e:
+        logging.error(f"Error in generating prayer from mentions: {e}")
+        return "The $PIG spirit encountered an error."
 
 def generate_transparency_content():
     """Generate a tweet discussing $PIG's focus on transparency and accountability."""

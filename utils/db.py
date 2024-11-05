@@ -105,7 +105,14 @@ def store_tweets_in_db(tweets, username):
     for tweet in tweets:
         tweet_id = tweet["id"]
         tweet_text = tweet["text"]
-        created_at = datetime.strptime(tweet["created_at"], "%Y-%m-%dT%H:%M:%S.%fZ")
+        created_at_str = tweet.get("created_at")
+
+        if created_at_str:
+            created_at = datetime.strptime(created_at_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+        else:
+            logging.warning(f"Missing created_at for tweet {tweet_id}. Using current time.")
+            created_at = datetime.utcnow()
+
         try:
             cursor.execute("""
                 INSERT INTO tweets (tweet_id, username, tweet_text, created_at)
@@ -119,6 +126,7 @@ def store_tweets_in_db(tweets, username):
     conn.commit()
     conn.close()
     return new_tweets  # Return the new tweets added for logging
+
 
 # Schedule to fetch tweets from specified accounts every 8 hours
 def schedule_tweet_updates():
