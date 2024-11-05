@@ -1,10 +1,14 @@
-import requests
+import tweepy
 import os
 import sqlite3
 import logging
 from datetime import datetime
 import schedule
 import time
+
+# Set up Tweepy client
+BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN")
+client = tweepy.Client(bearer_token=BEARER_TOKEN)
 
 # Database setup function for engagements and inventory
 def setup_database():
@@ -48,92 +52,58 @@ def setup_tweet_database():
     conn.commit()
     conn.close()
 
-# Set your bearer token
-BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN")
-
-# Function to get user ID from username
-def get_user_id(username):
-    headers = {"Authorization": f"Bearer {BEARER_TOKEN}"}
-    url = f"https://api.twitter.com/2/users/by/username/{username}"
-
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        user_data = response.json()
-        return user_data['data']['id']
-    else:
-        logging.error(f"Failed to fetch user ID for {username}. Status: {response.status_code}")
-        return None
+# Retrieve user IDs for specified usernames
+def get_user_ids(usernames):
+    """Retrieve and log user IDs for specified usernames."""
+    user_ids = {}
+    for username in usernames:
+        try:
+            user = client.get_user(username=username)
+            user_ids[username] = user.data.id
+            logging.info(f"Username: {username}, User ID: {user.data.id}")
+        except tweepy.TweepyException as e:
+            logging.error(f"Error fetching user ID for {username}: {e}")
+    return user_ids
 
 # Function to fetch tweets from user timeline
-def fetch_and_store_all_tweets(username, max_count=8):
-    user_id = get_user_id(username)
-    if not user_id:
-        logging.error(f"Skipping tweet fetch for {username} due to missing user ID.")
+def fetch_and_store_all_tweets(user_id, username, max_count=8):
+    """Fetch recent tweets from a user and store them in the database."""
+    response = client.get_users_tweets(id=user_id, max_results=max_count)
+    if not response.data:
+        logging.info(f"No tweets found for user {username}.")
         return
 
-    headers = {"Authorization": f"Bearer {BEARER_TOKEN}"}
-    url = f"https://api.twitter.com/2/users/{user_id}/tweets?max_results=10"
-    tweet_count = 0
-
-    while tweet_count < max_count:
-        logging.info(f"Fetching tweets for {username}, batch starting at count {tweet_count}.")
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            logging.error(f"Failed to fetch tweets for {username}. Status: {response.status_code}")
-            break
-
-        data = response.json()
-        tweets = data.get("data", [])
-        new_tweets = store_tweets_in_db(tweets, username)
-
-        tweet_count += len(new_tweets)  # Increment by the number of new tweets added
-        logging.info(f"Added {len(new_tweets)} new tweets to the database.")
-
-        if "meta" in data and "next_token" in data["meta"]:
-            next_token = data["meta"]["next_token"]
-            url = f"https://api.twitter.com/2/users/{user_id}/tweets?max_results=10&pagination_token={next_token}"
-        else:
-            logging.info(f"No more tweets available for {username}.")
-            break
-
-def store_tweets_in_db(tweets, username):
-    """Store fetched tweets in the database and return the count of new tweets added."""
     conn = sqlite3.connect("pig_bot.db")
     cursor = conn.cursor()
     new_tweets = []
 
-    for tweet in tweets:
-        tweet_id = tweet["id"]
-        tweet_text = tweet["text"]
-        created_at_str = tweet.get("created_at")
+    for tweet in response.data:
+        tweet_id = tweet.id
+        tweet_text = tweet.text
+        created_at = tweet.created_at if tweet.created_at else datetime.utcnow()
 
-        if created_at_str:
-            created_at = datetime.strptime(created_at_str, "%Y-%m-%dT%H:%M:%S.%fZ")
-        else:
-            logging.warning(f"Missing created_at for tweet {tweet_id}. Using current time.")
-            created_at = datetime.utcnow()
-
+        # Insert into database with duplicate checking
         try:
             cursor.execute("""
                 INSERT INTO tweets (tweet_id, username, tweet_text, created_at)
                 VALUES (?, ?, ?, ?)
             """, (tweet_id, username, tweet_text, created_at))
             new_tweets.append(tweet)
-            logging.info(f"Added tweet {tweet_id} from {created_at} to the database.")
+            logging.info(f"Stored tweet from {username}: {tweet_text}")
         except sqlite3.IntegrityError:
-            logging.info(f"Tweet {tweet_id} is already in the database, skipping.")
+            logging.info(f"Tweet {tweet_id} by {username} already in database; skipping.")
 
     conn.commit()
     conn.close()
-    return new_tweets  # Return the new tweets added for logging
-
+    logging.info(f"Added {len(new_tweets)} new tweets for {username} to the database.")
 
 # Schedule to fetch tweets from specified accounts every 8 hours
 def schedule_tweet_updates():
     usernames = ["blknoiz06", "MustStopMurad", "notthreadguy"]
+    user_ids = get_user_ids(usernames)
 
-    for username in usernames:
-        fetch_and_store_all_tweets(username, max_count=8)
+    for username, user_id in user_ids.items():
+        fetch_and_store_all_tweets(user_id, username, max_count=8)
 
 # Set up the recurring schedule
 schedule.every(8).hours.do(schedule_tweet_updates)

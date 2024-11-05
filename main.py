@@ -19,7 +19,7 @@ if __name__ == "__main__":
     bot = TwitterBot()
     shuffle_reward()  # Set initial reward rotation
     post_random_tweet(bot)
-    post_tweet(bot)
+    
 
     # Start mention check and engagement check in separate threads
     threading.Thread(target=run_mentions_check, daemon=True).start()
