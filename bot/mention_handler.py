@@ -3,7 +3,7 @@ from utils.item_award import award_item  # Import in mention handler if needed
 from utils.logging_config import logging
 import requests
 import json
-from utils.db import show_inventory
+
 from langchain.chat_models import ChatOpenAI
 
 from langchain.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
@@ -89,14 +89,7 @@ def handle_mention(mention, twitter_api_v2, username, current_reward):
                 fallback_text = f"@{username}, please tag a user after #pigID to analyze."
                 twitter_api_v2.create_tweet(text=fallback_text, in_reply_to_tweet_id=tweet_id)
 
-        # Check for #pigme hashtag
-        elif "#pigme" in mention.text.lower():
-            logging.info(f"[#pigme DETECTED] Mention by @{username} contains #pigme.")
-            show_inventory(username, tweet_id, twitter_api_v2)
-
-            # Send a DM with inventory info to the user
-            dm_message = f"Hello @{username}, here’s your inventory update from the Pig bot!"
-            send_direct_message_via_tweepy(username, dm_message)
+        
 
         # Handle other mentions without specific hashtags, using the parent tweet text
         else:
