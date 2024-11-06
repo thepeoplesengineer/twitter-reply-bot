@@ -9,7 +9,7 @@ from datetime import datetime
 BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN")
 client = tweepy.Client(bearer_token=BEARER_TOKEN)
 
-# Initialize databases for engagements, inventory, and tweets
+# Initialize databases for engagements, inventory, tweets, and replied tweets
 def setup_engagement_inventory_db():
     """Set up the engagements and inventory tables."""
     conn = sqlite3.connect("engagements.db")
@@ -35,9 +35,11 @@ def setup_engagement_inventory_db():
     conn.close()
 
 def setup_tweet_db():
-    """Create a table to store tweets for AI persona building."""
+    """Create tables to store tweets and replied tweet IDs for AI persona building and tracking replies."""
     conn = sqlite3.connect("pig_bot.db")
     cursor = conn.cursor()
+    
+    # Table for storing tweets for AI persona building
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS tweets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,6 +49,15 @@ def setup_tweet_db():
             created_at TIMESTAMP
         )
     """)
+
+    # Table for tracking replied tweet IDs to prevent duplicate responses
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS replied_tweets (
+            tweet_id TEXT PRIMARY KEY,
+            responded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
     conn.commit()
     conn.close()
 
@@ -75,6 +86,24 @@ def store_tweets_in_db(tweets, username):
     conn.commit()
     conn.close()
     return new_tweets
+
+# Functions to handle replied tweet IDs
+def has_replied_to_tweet(tweet_id):
+    """Check if a tweet ID has already been replied to."""
+    conn = sqlite3.connect("pig_bot.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT 1 FROM replied_tweets WHERE tweet_id = ?", (tweet_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return result is not None
+
+def save_replied_tweet_id(tweet_id):
+    """Save a tweet ID to the replied tweets table after replying."""
+    conn = sqlite3.connect("pig_bot.db")
+    cursor = conn.cursor()
+    cursor.execute("INSERT OR IGNORE INTO replied_tweets (tweet_id) VALUES (?)", (tweet_id,))
+    conn.commit()
+    conn.close()
 
 # Retrieve user IDs for specified usernames
 def get_user_ids(usernames):
@@ -113,5 +142,4 @@ def initialize_tweet_data():
     setup_engagement_inventory_db()
     setup_tweet_db()
     schedule_tweet_updates()  # Run initial update
-    schedule.every(8).hours.do(schedule_tweet_updates)  # Schedule updates every 8 hours
-
+    schedule.every(6).hours.do(schedule_tweet_updates)  # Schedule updates every 8 hours
