@@ -7,7 +7,7 @@ from utils.rewards_service import distribute_rewards, shuffle_reward
 from utils.item_award import award_item
 from bot.twitter_bot import TwitterBot
 from utils.god_mode import generate_tweet_content
-from utils.db import fetch_and_store_tweets, get_user_ids  # Corrected import
+from utils.db import fetch_and_store_tweets, fetch_and_store_piglore_tweets, get_user_ids
 
 # Define engagement target
 ENGAGEMENT_TOTAL_TARGET = 5
@@ -66,13 +66,7 @@ def post_tweet(bot):
         else:
             logging.error(f"Failed to post tweet: {e}")
 
-def update_tweet_database():
-    """Fetch recent tweets from specified influencers and store them in the database."""
-    usernames = ["blknoiz06", "MustStopMurad", "notthreadguy"]
-    user_ids = get_user_ids(usernames)  # Retrieve user IDs
 
-    for username, user_id in user_ids.items():
-        fetch_and_store_tweets(user_id, username, max_count=8)
 
 # Schedule tasks
 schedule.every(8).hours.do(update_tweet_database)
