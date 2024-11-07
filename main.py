@@ -1,6 +1,6 @@
 from bot.twitter_bot import TwitterBot
 from utils.logging_config import setup_logging
-from utils.db import initialize_tweet_data  # New function to handle tweet DB setup and scheduling
+from utils.db import initialize_tweet_data # New function to handle tweet DB setup and scheduling
 from utils.rewards_service import shuffle_reward, distribute_rewards_for_goals  # Import new reward distribution function
 from utils.schedule_tasks import check_engagements, post_random_tweet
 

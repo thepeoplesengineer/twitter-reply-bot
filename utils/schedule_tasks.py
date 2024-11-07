@@ -4,10 +4,9 @@ import schedule
 import random
 from datetime import datetime, timedelta
 from utils.rewards_service import distribute_rewards, shuffle_reward
-from utils.item_award import award_item
 from bot.twitter_bot import TwitterBot
 from utils.god_mode import generate_tweet_content
-from utils.db import fetch_and_store_tweets, fetch_and_store_piglore_tweets, get_user_ids
+from utils.db import update_tweet_database
 
 # Define engagement target
 ENGAGEMENT_TOTAL_TARGET = 5
