@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import time
 import logging
 import schedule
 import tweepy
@@ -148,24 +149,35 @@ def get_user_ids(usernames):
 # Fetch and store tweets using the reusable store_tweets_in_db function
 def fetch_and_store_tweets(user_id, username, max_count=8):
     """Fetch recent tweets from a user and store them in the database."""
-    response = client.get_users_tweets(id=user_id, max_results=max_count)
-    if not response.data:
-        logging.info(f"No tweets found for user {username}.")
-        return
+    try:
+        response = client.get_users_tweets(id=user_id, max_results=max_count)
+        
+        if response.meta:
+            remaining = response.meta.get('x-rate-limit-remaining')
+            reset_time = response.meta.get('x-rate-limit-reset')
+            logging.info(f"Rate limit remaining: {remaining}, resets at {reset_time}")
 
-    store_tweets_in_db(response.data, username)  # Use the reusable function
+        if not response.data:
+            logging.info(f"No tweets found for user {username}.")
+            return
+
+        store_tweets_in_db(response.data, username)
+
+    except tweepy.TooManyRequests:
+        logging.warning("Rate limit exceeded. Waiting before retrying.")
+
 
 def update_tweet_database():
     """Fetch recent tweets from specified influencers and #piglore tweets and store them in the database."""
-    # Fetch influencer tweets
     usernames = ["blknoiz06", "MustStopMurad", "notthreadguy"]
-    user_ids = get_user_ids(usernames)  # Retrieve user IDs
+    user_ids = get_user_ids(usernames)
 
     for username, user_id in user_ids.items():
         fetch_and_store_tweets(user_id, username, max_count=8)
+        time.sleep(5)  # Add a 5-second delay between requests to different users
 
-    # Fetch #piglore tweets
-    fetch_and_store_piglore_tweets(max_count=50)
+    # Fetch #piglore tweets separately
+    fetch_and_store_piglore_tweets(max_count=5)
 
 
 def initialize_tweet_data():
