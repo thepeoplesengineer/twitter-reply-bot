@@ -98,22 +98,34 @@ def store_tweets_in_db(tweets, category="general"):
 
     for tweet in tweets:
         tweet_id = tweet["id"]
-        tweet_text = tweet["text"]
-        created_at = tweet["created_at"] or datetime.utcnow()
+        tweet_text = tweet.get("text", "")
+        created_at = tweet.get("created_at") or datetime.utcnow()
+        username = tweet.get("username", "")  # Use get() to avoid KeyError
+
+        # If the username is not available, fetch it by using the author_id
+        if not username and "author_id" in tweet:
+            author_id = tweet["author_id"]
+            try:
+                user = client.get_user(id=author_id)
+                username = user.data.username
+            except Exception as e:
+                logging.error(f"Error fetching username for author_id {author_id}: {e}")
+                username = "Unknown"
 
         try:
             cursor.execute("""
                 INSERT INTO tweets (tweet_id, username, tweet_text, created_at, category)
                 VALUES (?, ?, ?, ?, ?)
-            """, (tweet_id, tweet["username"], tweet_text, created_at, category))
+            """, (tweet_id, username, tweet_text, created_at, category))
             new_tweets.append(tweet)
-            logging.info(f"Stored tweet from {tweet['username']} in category '{category}': {tweet_text}")
+            logging.info(f"Stored tweet from {username} in category '{category}': {tweet_text}")
         except sqlite3.IntegrityError:
-            logging.info(f"Tweet {tweet_id} by {tweet['username']} already in database; skipping.")
+            logging.info(f"Tweet {tweet_id} by {username} already in database; skipping.")
 
     conn.commit()
     conn.close()
     return new_tweets
+
 
 # Retrieve user IDs for specified usernames
 def get_user_ids(usernames):
