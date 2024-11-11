@@ -141,14 +141,25 @@ def get_user_ids(usernames):
     return user_ids
 
 # Fetch and store tweets using the reusable store_tweets_in_db function
-def fetch_and_store_tweets(user_id, username, max_count=8):
+def fetch_and_store_tweets(user_id, username, max_count=8, max_retries=5):
     """Fetch recent tweets from a user and store them in the database."""
-    response = client.get_users_tweets(id=user_id, max_results=max_count)
-    if not response.data:
-        logging.info(f"No tweets found for user {username}.")
-        return
+    retry_count = 0
+    while retry_count < max_retries:
+        try:
+            response = client.get_users_tweets(id=user_id, max_results=max_count)
+            if response.data:
+                store_tweets_in_db(response.data, username)
+            break  # Exit loop if request is successful
 
-    store_tweets_in_db(response.data, username)  # Use the reusable function
+        except tweepy.errors.TooManyRequests as e:
+            retry_count += 1
+            wait_time = 60 * (2 ** retry_count)  # Exponential backoff: 60s, 120s, 240s, etc.
+            logging.warning(f"Rate limit exceeded. Retrying in {wait_time} seconds... (Attempt {retry_count}/{max_retries})")
+            time.sleep(wait_time)
+        
+        except Exception as e:
+            logging.error(f"Error fetching tweets for user {username} (ID: {user_id}): {e}")
+            break  # Exit loop if it's a non-rate-limit error
 
 def update_tweet_database():
     """Fetch recent tweets from specified influencers and hashtags, and store them in the database."""
@@ -157,10 +168,11 @@ def update_tweet_database():
 
     for username, user_id in user_ids.items():
         fetch_and_store_tweets(user_id, username, max_count=8)
-        time.sleep(5)  # Add a 5-second delay between requests to different users
+        time.sleep(5)  # Add a 5-second delay between each user's tweets to avoid rate limits
 
-    # Fetch and store tweets for #piglore and #pigIQ hashtags
+    # Fetch and store tweets for hashtags with similar delay
     fetch_and_store_hashtag_tweets("piglore", max_count=10, category="piglore")
+    time.sleep(5)
     fetch_and_store_hashtag_tweets("pigIQ", max_count=10, category="pigIQ")
 
 
