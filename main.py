@@ -11,6 +11,7 @@ import time
 import logging
 import random
 
+
 def run_mentions_check(bot):
     """Function to repeatedly check mentions every 45 minutes."""
     while True:
