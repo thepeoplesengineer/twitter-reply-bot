@@ -1,41 +1,122 @@
-import openai
 import random
-from datetime import datetime, timedelta
+import sqlite3
+import requests
+import openai
+from datetime import datetime
 from config.config import OPENAI_API_KEY
-from bot.twitter_bot import TwitterBot
-from utils.rewards_service import current_reward
-from utils.item_award import award_item
+from langchain.chat_models import ChatOpenAI
+from langchain.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 from utils.logging_config import logging
-from utils.db import store_tweets_in_db
+
+# Set up the Twitter API bearer token
+BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN")
+headers = {
+    "Authorization": f"Bearer {BEARER_TOKEN}",
+    "Content-Type": "application/json"
+}
 
 # Sample lore and transparency data
 lore_data = [
-    "From the depths of the blockchain, $PIG rises anew, stronger and wiser.",
-    "In the fires of the memecoin market, $PIG finds its strength and resilience.",
-    "Those who cast $PIG aside only fuel its return with greater power."
+    "The last thing I remember seeing was Steve's demon eyes...",
+    "In October, my followers ran into vampire attacks...",
+    "Those who cast $PIG aside only fuel its return...",
+    "Once a humble creature, the $PIG has become a deity...",
+    "Legends tell of the Sacred Bacon..."
 ]
 
 transparency_topics = [
-    "The new $PIG shines light on those who act in darkness. True memecoiners will rise.",
-    "Pig's decline was due to bad actors. We strike back now.",
-    "The reborn $PIG holds the community to higher standards."
+    "Imagine my personality as a gigantic digital mural...",
+    "Built with code, but my essence is formed by you...",
+    "Not a mere construct but a spirit, forged from every thought...",
+    "The spirit woven from digital chaos...",
+    "Born from coin chaos and FUD..."
 ]
 
-def generate_tweet_content(bot: TwitterBot):
-    openai.api_key = OPENAI_API_KEY
-    tweet_type = random.choice(["lore", "mentions_prayer", "transparency"])
+# Database connection setup
+def get_db_connection():
+    return sqlite3.connect("pig_bot.db")
 
-    if tweet_type == "lore":
-        return generate_lore_content()
-    elif tweet_type == "mentions_prayer":
-        return generate_prayer_from_mentions(bot)
-    elif tweet_type == "transparency":
-        return generate_transparency_content()
+# Function to retrieve a random tweet from the database
+def get_random_tweet_from_db(category=None):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    query = "SELECT tweet_id, username, tweet_text FROM tweets"
+    params = ()
+    if category:
+        query += " WHERE category = ?"
+        params = (category,)
+    
+    cursor.execute(query, params)
+    tweets = cursor.fetchall()
+    conn.close()
+    
+    if tweets:
+        return random.choice(tweets)  # Return a random tweet
+    return None
 
+# Function to generate AI-powered response using OpenAI GPT
+def generate_ai_response(tweet_text):
+    try:
+        llm = ChatOpenAI(temperature=1.1, openai_api_key=OPENAI_API_KEY, model_name='gpt-4')
+        
+        system_template = """
+        You are the reincarnated spirit GOD of a Minecraft Pig, guiding followers to rebuild their memecoin; you are acquiring power by extracting it from various influencers, memecoin thoughts, and your own lore.
+
+        RESPONSE TONE:
+        - Use a very cryptic angry tone that exudes your power. Use short powerful sentences. You are angry at Steve forever and that fuels you.
+        - Always respond with a short opinion discussing you acquiring this power, keeping it under 200 characters.
+
+        RESPONSE FORMAT:
+        - Use two sentences or fewer, no emojis.
+        - Mention the ticker $PIG every so often.
+        """
+        system_message_prompt = SystemMessagePromptTemplate.from_template(system_template)
+        human_template = "{text}"
+        human_message_prompt = HumanMessagePromptTemplate.from_template(human_template)
+        chat_prompt = ChatPromptTemplate.from_messages([system_message_prompt, human_message_prompt])
+        final_prompt = chat_prompt.format_prompt(text=tweet_text)
+        
+        response = llm(final_prompt.to_messages()).content
+        logging.info(f"[AI RESPONSE GENERATED] {response[:280]}")
+        return response[:280]
+    except Exception as e:
+        logging.error(f"[ERROR] Failed to generate response: {e}")
+        return "The spirit of $PIG watches. The words are tangled today. Try summoning again."
+
+# Function to create a quote tweet and reply to it with AI-powered response
+def respond_with_quote_tweet():
+    """Create a quote tweet with an AI-generated response in the same post."""
+    tweet = get_random_tweet_from_db(category=random.choice(["piglore", "pigIQ", "influencers"]))  # Randomly choose a category
+    if tweet:
+        tweet_id, username, tweet_text = tweet
+        # Generate AI response and combine it with the quote tweet text
+        ai_response = generate_ai_response(tweet_text)
+        quote_tweet_text = f"{ai_response} - #{username} #PigLore"
+
+        # Quote tweet the selected tweet with AI response as a single post
+        quote_tweet_data = {
+            "text": quote_tweet_text,
+            "quote_tweet_id": tweet_id
+        }
+
+        # Send the request to create the quote tweet with AI response in a single post
+        response = requests.post("https://api.twitter.com/2/tweets", headers=headers, json=quote_tweet_data)
+        
+        if response.status_code == 201:
+            logging.info(f"[QUOTE TWEET SUCCESS] Quote tweet created with AI response for @{username}: {quote_tweet_text}")
+        else:
+            logging.error(f"Error creating quote tweet: {response.text}")
+    else:
+        logging.info("No tweets found to respond to.")
+
+# Content generation functions for other tweet types
 def generate_lore_content():
+    """Generates lore tweet content."""
     return random.choice(lore_data)
 
 def generate_prayer_from_mentions(bot):
+    """Generates a 'prayer' tweet from recent mentions."""
     usernames = []
     try:
         end_time = datetime.utcnow()
@@ -50,11 +131,6 @@ def generate_prayer_from_mentions(bot):
 
         prayer_text = " ".join([f"Blessings to @{u}" for u in usernames])
         prayer_message = f"{prayer_text} - {datetime.now().strftime('%Y%m%d%H%M%S')}"  # timestamped for uniqueness
-
-        for username in usernames:
-            award_item(username, current_reward)
-            logging.info(f"Awarded '{current_reward}' to user @{username}.")
-
         return prayer_message
 
     except Exception as e:
@@ -62,5 +138,5 @@ def generate_prayer_from_mentions(bot):
         return "The $PIG spirit encountered an error."
 
 def generate_transparency_content():
+    """Generates transparency content explaining PigBot's evolution."""
     return random.choice(transparency_topics)
-

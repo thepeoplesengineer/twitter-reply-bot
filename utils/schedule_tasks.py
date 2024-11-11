@@ -16,7 +16,7 @@ def check_engagements():
     """Check recent tweets by the bot for engagement and flag those that meet the target."""
     bot = TwitterBot()
     try:
-        bot_tweets = bot.twitter_api_v2.get_users_tweets(id=bot.twitter_me_id, max_results=5)
+        bot_tweets = bot.twitter_api_v2.get_users_tweets(id=bot.twitter_me_id, max_results=10)
         for tweet in bot_tweets.data:
             tweet_id = tweet.id
             if tweet_id not in goal_achieved_tweets:

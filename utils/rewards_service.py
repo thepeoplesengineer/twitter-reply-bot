@@ -17,7 +17,7 @@ def shuffle_reward():
 
 def check_engagements(bot):
     logging.info("[ENGAGEMENT CHECK] Checking engagements on bot's recent tweets.")
-    bot_tweets = bot.twitter_api_v2.get_users_tweets(id=bot.twitter_me_id, max_results=5)
+    bot_tweets = bot.twitter_api_v2.get_users_tweets(id=bot.twitter_me_id, max_results=10)
 
     for tweet in bot_tweets.data:
         tweet_id = tweet.id

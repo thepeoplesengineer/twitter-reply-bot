@@ -47,7 +47,8 @@ def setup_tweet_db():
             tweet_id TEXT UNIQUE,
             username TEXT,
             tweet_text TEXT,
-            created_at TIMESTAMP
+            created_at TIMESTAMP,
+            category TEXT
         )
     """)
 
@@ -62,76 +63,57 @@ def setup_tweet_db():
     conn.commit()
     conn.close()
 
-
-def fetch_and_store_piglore_tweets(max_count=5):
-    """Fetch recent tweets with the #piglore hashtag and store them in the database."""
+def fetch_and_store_hashtag_tweets(hashtag, max_count=5, category="general"):
+    """Fetch recent tweets with a specified hashtag and store them in the database."""
     try:
-        response = client.search_recent_tweets(query="#piglore", max_results=max_count, tweet_fields=["created_at"])
+        response = client.search_recent_tweets(query=f"#{hashtag}", max_results=max_count, tweet_fields=["created_at"])
         
         if not response.data:
-            logging.info("No recent tweets found with #piglore.")
+            logging.info(f"No recent tweets found with #{hashtag}.")
             return
 
-        piglore_tweets = []
+        tweets = []
         for tweet in response.data:
             tweet_data = {
                 "id": tweet.id,
                 "text": tweet.text,
                 "created_at": tweet.created_at,
-                "username": tweet.author_id
+                "username": tweet.author_id,
+                "category": category
             }
-            piglore_tweets.append(tweet_data)
+            tweets.append(tweet_data)
         
-        # Store the fetched tweets in the database
-        store_tweets_in_db(piglore_tweets, "piglore")
-        logging.info("Stored #piglore tweets in the database.")
+        # Store the fetched tweets in the database with the specified category
+        store_tweets_in_db(tweets, category)
+        logging.info(f"Stored #{hashtag} tweets in the database under category '{category}'.")
 
     except tweepy.TweepyException as e:
-        logging.error(f"Error fetching #piglore tweets: {e}")
+        logging.error(f"Error fetching #{hashtag} tweets: {e}")
 
-# Function to store tweets in the database
-def store_tweets_in_db(tweets, username):
-    """Store fetched tweets in the database."""
+def store_tweets_in_db(tweets, category="general"):
+    """Store fetched tweets in the database under a specific category."""
     conn = sqlite3.connect("pig_bot.db")
     cursor = conn.cursor()
     new_tweets = []
 
     for tweet in tweets:
-        tweet_id = tweet.id
-        tweet_text = tweet.text
-        created_at = tweet.created_at or datetime.utcnow()
+        tweet_id = tweet["id"]
+        tweet_text = tweet["text"]
+        created_at = tweet["created_at"] or datetime.utcnow()
 
         try:
             cursor.execute("""
-                INSERT INTO tweets (tweet_id, username, tweet_text, created_at)
-                VALUES (?, ?, ?, ?)
-            """, (tweet_id, username, tweet_text, created_at))
+                INSERT INTO tweets (tweet_id, username, tweet_text, created_at, category)
+                VALUES (?, ?, ?, ?, ?)
+            """, (tweet_id, tweet["username"], tweet_text, created_at, category))
             new_tweets.append(tweet)
-            logging.info(f"Stored tweet from {username}: {tweet_text}")
+            logging.info(f"Stored tweet from {tweet['username']} in category '{category}': {tweet_text}")
         except sqlite3.IntegrityError:
-            logging.info(f"Tweet {tweet_id} by {username} already in database; skipping.")
+            logging.info(f"Tweet {tweet_id} by {tweet['username']} already in database; skipping.")
 
     conn.commit()
     conn.close()
     return new_tweets
-
-# Functions to handle replied tweet IDs
-def has_replied_to_tweet(tweet_id):
-    """Check if a tweet ID has already been replied to."""
-    conn = sqlite3.connect("pig_bot.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT 1 FROM replied_tweets WHERE tweet_id = ?", (tweet_id,))
-    result = cursor.fetchone()
-    conn.close()
-    return result is not None
-
-def save_replied_tweet_id(tweet_id):
-    """Save a tweet ID to the replied tweets table after replying."""
-    conn = sqlite3.connect("pig_bot.db")
-    cursor = conn.cursor()
-    cursor.execute("INSERT OR IGNORE INTO replied_tweets (tweet_id) VALUES (?)", (tweet_id,))
-    conn.commit()
-    conn.close()
 
 # Retrieve user IDs for specified usernames
 def get_user_ids(usernames):
@@ -149,26 +131,15 @@ def get_user_ids(usernames):
 # Fetch and store tweets using the reusable store_tweets_in_db function
 def fetch_and_store_tweets(user_id, username, max_count=8):
     """Fetch recent tweets from a user and store them in the database."""
-    try:
-        response = client.get_users_tweets(id=user_id, max_results=max_count)
-        
-        if response.meta:
-            remaining = response.meta.get('x-rate-limit-remaining')
-            reset_time = response.meta.get('x-rate-limit-reset')
-            logging.info(f"Rate limit remaining: {remaining}, resets at {reset_time}")
+    response = client.get_users_tweets(id=user_id, max_results=max_count)
+    if not response.data:
+        logging.info(f"No tweets found for user {username}.")
+        return
 
-        if not response.data:
-            logging.info(f"No tweets found for user {username}.")
-            return
-
-        store_tweets_in_db(response.data, username)
-
-    except tweepy.TooManyRequests:
-        logging.warning("Rate limit exceeded. Waiting before retrying.")
-
+    store_tweets_in_db(response.data, username)  # Use the reusable function
 
 def update_tweet_database():
-    """Fetch recent tweets from specified influencers and #piglore tweets and store them in the database."""
+    """Fetch recent tweets from specified influencers and hashtags, and store them in the database."""
     usernames = ["blknoiz06", "MustStopMurad", "notthreadguy"]
     user_ids = get_user_ids(usernames)
 
@@ -176,18 +147,20 @@ def update_tweet_database():
         fetch_and_store_tweets(user_id, username, max_count=8)
         time.sleep(5)  # Add a 5-second delay between requests to different users
 
-    # Fetch #piglore tweets separately
-    fetch_and_store_piglore_tweets(max_count=5)
+    # Fetch and store tweets for #piglore and #pigIQ hashtags
+    fetch_and_store_hashtag_tweets("piglore", max_count=10, category="piglore")
+    fetch_and_store_hashtag_tweets("pigIQ", max_count=10, category="pigIQ")
 
 
 def initialize_tweet_data():
-    """Set up databases and schedule tweet updates, including #piglore tweets."""
+    """Set up databases and schedule tweet updates, including hashtags and influencer tweets."""
     setup_engagement_inventory_db()
     setup_tweet_db()
     
-    # Initial tweet data collection for influencers and #piglore
+    # Initial tweet data collection for influencers and hashtags
     update_tweet_database()
     
     # Schedule future updates every 8 hours
     schedule.every(8).hours.do(update_tweet_database)
+
 
