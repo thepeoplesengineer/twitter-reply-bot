@@ -54,6 +54,14 @@ class TwitterBot:
             logging.error(f"Failed to retrieve username for author ID {author_id}: {e}")
             return "anonymous"
 
+    def tweet(self, content):
+        """Posts a tweet with the given content."""
+        try:
+            self.twitter_api_v1.update_status(content)  # Post the tweet using Twitter API v1
+            logging.info(f"Tweet posted successfully: {content}")
+        except Exception as e:
+            logging.error(f"Failed to post tweet: {e}")
+
     def respond_to_mentions(self):
         """Fetch new mentions and respond to them."""
         logging.info("Checking for new mentions.")
@@ -103,6 +111,5 @@ class TwitterBot:
         except Exception as e:
             logging.error(f"Error fetching recent mentions: {e}")
             return []
-
 
 
