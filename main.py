@@ -20,7 +20,7 @@ def run_mentions_check(bot):
 
 def generate_tweet_content(bot):
     """Decide on the tweet type and generate content accordingly."""
-    tweet_type = random.choice(["lore", "mentions_prayer", "transparency", "quote_tweet"])
+    tweet_type = random.choice(["lore", "mentions_prayer", "transparency"])
 
     if tweet_type == "lore":
         content = generate_lore_content()
@@ -34,9 +34,7 @@ def generate_tweet_content(bot):
         content = generate_transparency_content()
         bot.tweet(content)
         logging.info(f"[TRANSPARENCY TWEET] Tweeted transparency content: {content}")
-    elif tweet_type == "quote_tweet":
-        respond_with_quote_tweet()  # Handles its own posting and logging
-        logging.info("[QUOTE TWEET] Responded with a quote tweet and AI-powered reply")
+    
 
 def post_random_tweet(bot):
     """Wrapper for generate_tweet_content to post a tweet at random intervals."""
